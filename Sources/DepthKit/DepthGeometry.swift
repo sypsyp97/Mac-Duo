@@ -98,10 +98,18 @@ public struct DepthOptics {
     /// 0 leaves the picture sharp and lit, 1 matches the effect this imitates.
     public var strength: Double = 1
 
-    /// Blur radius for this frame, in points.
+    /// Blur radius at the far edge of the picture, in points. Every point
+    /// below it blurs less, in proportion to how far off the glass it has
+    /// floated; see the shader.
     public var blurRadius: Double {
         Self.maximumBlurPoints * strength * pow(travel, Self.blurCurve)
     }
+
+    /// How far the far edge of the picture has floated off the glass, as a
+    /// fraction of the screen height. The blur follows this up the picture,
+    /// so it is zero at the hinge, zero everywhere while the picture still
+    /// lies on the glass, and widest at the edge that has travelled furthest.
+    public var farEdgeLift: Double { abs(sinSeparation) }
 
     /// What fraction of the light is left. 1 on the glass, 0 shut.
     public var brightness: Double {

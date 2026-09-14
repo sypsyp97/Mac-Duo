@@ -34,8 +34,7 @@ public enum DepthShaders {
         float4 optics1;          // eye distance, travel, unused, unused
     };
 
-    /// Longest run of taps across a footprint. Eight is where the cost stops
-    /// buying visible sharpness on the receding half.
+    /// Taps around the blur disc. Eight is where more stops showing.
     constant int kMaxTaps = 8;
 
     vertex float4 depthVertex(uint vertexID [[vertex_id]]) {
@@ -53,8 +52,10 @@ public enum DepthShaders {
         float2 paddedSize = uniforms.paddedAndScale.xy;
         float pixelScale = uniforms.paddedAndScale.z;
         float maxLevel = uniforms.paddedAndScale.w;
-        float blurRadius = uniforms.optics0.z;
+        float blurAtFarEdge = uniforms.optics0.z;
         float brightness = uniforms.optics0.w;
+        float sinSeparation = uniforms.optics0.x;
+        float screenHeight = screenSize.y;
 
         // Fragment coordinates are pixels with y down; the geometry is points
         // with y up.
@@ -68,39 +69,42 @@ public enum DepthShaders {
         if (abs(mapped.z) < 1e-6) { return float4(0.0, 0.0, 0.0, 1.0); }
         float2 picturePoint = mapped.xy / mapped.z;
 
-        // The ellipse one pixel covers on the picture, widened by the blur.
+        // How far this point of the picture has floated off the glass: zero
+        // along the hinge, widest at the far edge, and zero everywhere while
+        // the picture still lies flat. The blur follows it, which is what
+        // makes the effect read as depth rather than as an out-of-focus
+        // screen. A single radius over the whole picture looks like someone
+        // turned the focus ring.
+        float lift = clamp(picturePoint.y / screenHeight, 0.0, 1.0) * abs(sinSeparation);
+        float blurRadius = blurAtFarEdge * lift;
+
+        // A pixel's own footprint on the picture sets the floor, so the
+        // receding half is filtered rather than aliased.
         float2 dpdx = dfdx(picturePoint);
         float2 dpdy = dfdy(picturePoint);
-        float lengthX = length(dpdx);
-        float lengthY = length(dpdy);
-        float majorLength = max(lengthX, lengthY);
-        float minorLength = min(lengthX, lengthY);
-        float2 majorAxis = (lengthX >= lengthY) ? dpdx : dpdy;
-        float2 majorDirection = majorLength > 1e-6 ? majorAxis / majorLength : float2(1.0, 0.0);
+        float footprint = 0.5 * max(length(dpdx), length(dpdy));
+        float radius = max(blurRadius, footprint);
 
-        float majorRadius = 0.5 * majorLength + blurRadius;
-        float minorRadius = max(0.5 * minorLength + blurRadius, 1e-4);
-
-        // One tap covers the narrow direction; the run of them covers the long
-        // one, which is what a pyramid alone cannot do.
-        int taps = int(ceil(clamp(majorRadius / minorRadius, 1.0, float(kMaxTaps))));
-        float mipLevel = clamp(log2(max(minorRadius * 2.0 * pixelScale, 1.0)), 0.0, maxLevel);
-        float span = majorRadius - minorRadius;
+        // The pyramid carries most of the width and the taps smooth what it
+        // leaves behind: a mip level alone is blocky, and its transitions show
+        // up as banding across a gradient this wide.
+        float mipLevel = clamp(log2(max(radius * pixelScale, 1.0)), 0.0, maxLevel);
 
         float3 gathered = float3(0.0);
         float weightSum = 0.0;
         for (int i = 0; i < kMaxTaps; ++i) {
-            if (i >= taps) { break; }
-            float offset = (taps == 1) ? 0.0 : (float(i) / float(taps - 1)) * 2.0 - 1.0;
-            float weight = 1.0 - 0.5 * offset * offset;
+            // Golden angle spiral: even coverage of the disc at any tap count,
+            // and no axis for the eye to latch onto.
+            float t = (float(i) + 0.5) / float(kMaxTaps);
+            float angle = float(i) * 2.399963;
+            float2 offset = float2(cos(angle), sin(angle)) * sqrt(t) * radius;
+            float weight = 1.0 - 0.6 * t;
             weightSum += weight;
-            float2 samplePoint = picturePoint + majorDirection * (offset * span);
-            float2 unit = (samplePoint - paddedOrigin) / paddedSize;
+            float2 unit = (picturePoint + offset - paddedOrigin) / paddedSize;
             // Outside the picture and its margin is black, which is what the
             // margin is there to blend into.
             if (unit.x < 0.0 || unit.x > 1.0 || unit.y < 0.0 || unit.y > 1.0) { continue; }
-            float2 texCoord = float2(unit.x, 1.0 - unit.y);
-            gathered += picture.sample(linearSampler, texCoord, level(mipLevel)).rgb * weight;
+            gathered += picture.sample(linearSampler, float2(unit.x, 1.0 - unit.y), level(mipLevel)).rgb * weight;
         }
         float3 colour = gathered / max(weightSum, 1e-4);
 
