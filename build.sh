@@ -57,7 +57,9 @@ echo "built ${BUNDLE}"
 codesign -dv "$BUNDLE" 2>&1 | grep -E "Identifier|TeamIdentifier|Signature" || true
 
 if "$RUN_APP"; then
-  pkill -x MacDuo 2>/dev/null || true
+  # Only this checkout's build. `pkill -x MacDuo` matches on the process name
+  # alone, so it also kills a Mac Duo the user installed in /Applications.
+  pkill -fx "$PWD/$BUNDLE/Contents/MacOS/MacDuo" 2>/dev/null || true
   sleep 0.5
   open "$BUNDLE"
   echo "launched"
