@@ -3,7 +3,32 @@
 All notable changes to this fork. Kept in the style of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.0.0]
+
+First release under this name. It is a fork of
+[sumimakito/Mac-Duo](https://github.com/sumimakito/Mac-Duo) with the projection re-solved, the
+look driven from the lid rather than from sliders, and a way to tell it where you are sitting.
+
+### Motion
+
+- **The lid's smoothing is the original critically damped spring, deliberately.** Velocity
+  extrapolation was written, tuned against a simulation of the measured sensor and unit tested; on
+  paper it cut the lag of a steady close from several degrees to 0.75, and on a real lid it was
+  clearly worse. A hand-pushed lid carries tremor and hinge stiction that a smooth simulated ramp
+  does not, and extrapolating a velocity from that amplifies both. The code says so, so nobody
+  repeats it.
+- The sensor was measured: polling it at 270 Hz yields a new value **8.2 times a second**, gaps of
+  103 ms median and 312 ms at worst, each about 0.02°. The display draws at 120 Hz, so fourteen
+  frames in fifteen have nothing new.
+- Polling runs at 24 Hz rather than 30, on feel. The likely mechanism is in the code comment: the
+  velocity estimate divides by an interval the poll period quantises, and that velocity decides
+  when the effect starts and stops.
+- **A run that has just ended will not start another** until the lid has clearly been opened again,
+  3° past the start angle or held at it for 0.4 s. Releasing is direction-aware, so opening across
+  the start angle ended a run at once and closing back across it started another just as fast,
+  leaving a band zero degrees wide. Measured on a real lid at a 105° start angle: runs ended at 106
+  and restarted at 102 within 633 ms, replaying the whole fade out and in each time.
+
 
 ### Changed
 

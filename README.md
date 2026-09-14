@@ -27,6 +27,20 @@ picture would actually be.
 - **Metal rendering.** One full-screen pass per frame, 0.49 ms on an M5 Pro against an 8.3 ms
   budget at 120 Hz.
 
+## Install
+
+[**Download the latest release**](https://github.com/sypsyp97/Mac-Duo-Pro/releases/latest) — DMG or
+ZIP, universal.
+
+The build is signed ad-hoc rather than with a Developer ID, so Gatekeeper refuses it on a double
+click. Right-click the app and choose **Open**, or:
+
+```sh
+xattr -dr com.apple.quarantine "/Applications/Mac Duo Pro.app"
+```
+
+Grant Screen Recording when asked. The camera is optional and only used when you press Calibrate.
+
 ## Requirements
 
 macOS 14 or later, and a MacBook with a lid angle sensor. The app says so when there is none.
@@ -43,6 +57,16 @@ Xcode with Swift 6.0 or later:
 ```
 
 The app lands in `build/Mac Duo Pro.app`.
+
+### Releasing
+
+Tag a version and the workflow builds, packages and publishes it:
+
+```sh
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+It refuses to run if the tag and `CFBundleShortVersionString` disagree, so the two cannot drift.
 
 ### Signing, and why it matters here
 
