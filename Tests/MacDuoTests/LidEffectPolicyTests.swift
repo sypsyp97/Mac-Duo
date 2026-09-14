@@ -52,6 +52,7 @@ struct LidEffectPolicyTests {
                 predictedAngle: 129.9,
                 riseSinceLowest: 0,
                 hasBeenAboveThreshold: true,
+            isReArmed: true,
                 wasClosingRecently: intent.wasClosingRecently(at: 10.3, memoryDuration: 1.5),
                 isClearlyOpening: false,
                 hasDwelledOpen: false,
@@ -70,6 +71,7 @@ struct LidEffectPolicyTests {
                 predictedAngle: 129,
                 riseSinceLowest: 0,
                 hasBeenAboveThreshold: true,
+            isReArmed: true,
                 wasClosingRecently: false,
                 isClearlyOpening: false,
                 hasDwelledOpen: false,
@@ -156,10 +158,52 @@ struct LidEffectPolicyTests {
             predictedAngle: angle,
             riseSinceLowest: rise,
             hasBeenAboveThreshold: true,
+            isReArmed: true,
             wasClosingRecently: false,
             isClearlyOpening: opening,
             hasDwelledOpen: dwelled,
             minimumDurationElapsed: minimumDurationElapsed
         )
+    }
+}
+
+/// Rocking the lid around the start angle used to replay the whole effect:
+/// releasing is direction-aware, so opening across the angle ends a run at
+/// once, and closing back across it started another just as fast. Measured on
+/// a real lid at a 105 degree start angle, runs ended at 106 and restarted at
+/// 102 within 633 ms.
+struct ReArmTests {
+
+    private let policy = LidEffectPolicy(threshold: 105, hysteresis: 4)
+
+    private func wantsStart(at angle: Double, reArmed: Bool) -> Bool {
+        policy.wantsEffect(
+            isEnabled: true,
+            isActive: false,
+            angle: angle,
+            predictedAngle: angle,
+            riseSinceLowest: 0,
+            hasBeenAboveThreshold: true,
+            isReArmed: reArmed,
+            wasClosingRecently: true,
+            isClearlyOpening: false,
+            hasDwelledOpen: false,
+            minimumDurationElapsed: true
+        )
+    }
+
+    @Test func aRunThatJustEndedDoesNotStartAnother() {
+        #expect(wantsStart(at: 102, reArmed: false) == false)
+    }
+
+    @Test func openingClearlyPastTheAngleArmsItAgain() {
+        #expect(wantsStart(at: 102, reArmed: true))
+    }
+
+    @Test func theReArmIsWiderThanTheJitterItIsThereFor() {
+        // The lid readings dither by hundredths; three degrees is well clear,
+        // and still inside what a hinge can reach above a sensible start angle.
+        #expect(LidEffectPolicy.reArmRise > 1)
+        #expect(LidEffectPolicy.reArmRise < LidEffectPolicy.minimumReleaseRise * 4)
     }
 }

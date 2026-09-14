@@ -67,6 +67,13 @@ final class LidController: ObservableObject {
     private var closingOutStartedAt: CFTimeInterval = 0
     private var builtInLayout = Layout()
     private var peakAngle: Double = 0
+    /// Cleared when a run ends, set again once the lid has clearly opened past
+    /// the start angle. Without it, rocking the lid around that angle replays
+    /// the whole effect over and over.
+    private var isReArmed = true
+    /// Since when the lid has been at or above the start angle, for the
+    /// slower way of re-arming.
+    private var aboveThresholdSince: CFTimeInterval?
     /// The lid angle when this run started. The picture is left standing at
     /// that angle in the room, so the separation is zero on the first frame
     /// and the overlay fades in over a screen it matches exactly. The
@@ -78,7 +85,17 @@ final class LidController: ObservableObject {
     private var lowestRunAngle: Double = 0
 
     private static let idlePollInterval: TimeInterval = 1.0 / 8
-    private static let activePollInterval: TimeInterval = 1.0 / 30
+    /// The sensor produces a new value only about 8 times a second, so most
+    /// polls re-read the same number.
+    ///
+    /// 24 rather than 30 on the strength of how it feels, which is the only
+    /// instrument that matters here. The mechanism is most likely the velocity
+    /// estimate: it is taken between consecutive *changed* readings, so the
+    /// poll period quantises the interval it divides by. Polling faster gives
+    /// shorter, noisier intervals, and that velocity feeds the decisions about
+    /// when to start and end the effect. A noisier velocity means twitchier
+    /// triggering, which is exactly what is felt near the start angle.
+    private static let activePollInterval: TimeInterval = 1.0 / 24
     private static let fadeInDuration: TimeInterval = 0.07
     /// Degrees above the pre-warm zone at which polling speeds up.
     private static let fastPollMargin: Double = 20
@@ -215,6 +232,8 @@ final class LidController: ObservableObject {
         motionIntent.reset()
         openDwell.reset()
         peakAngle = 0
+        isReArmed = true
+        aboveThresholdSince = nil
         if pollTimer != nil { setPollInterval(Self.idlePollInterval) }
     }
 
@@ -286,6 +305,7 @@ final class LidController: ObservableObject {
 
         rawAngle = angle
         peakAngle = max(peakAngle, angle)
+        updateReArm(angle: angle)
         if isActive { lowestRunAngle = min(lowestRunAngle, angle) }
         publish(angle: angle)
 
@@ -299,6 +319,32 @@ final class LidController: ObservableObject {
         let wantsFastPolling = preferences.isEnabled
             && (preview != nil || isActive || angle <= prewarmZone + Self.fastPollMargin)
         setPollInterval(wantsFastPolling ? Self.activePollInterval : Self.idlePollInterval)
+    }
+
+    /// A run that has ended may not start another until the lid has clearly
+    /// been opened again: either well past the start angle, or held at it.
+    private func updateReArm(angle: Double) {
+        guard !isReArmed else {
+            aboveThresholdSince = nil
+            return
+        }
+        let threshold = preferences.thresholdAngle
+        if angle >= threshold + LidEffectPolicy.reArmRise {
+            isReArmed = true
+            aboveThresholdSince = nil
+            return
+        }
+        guard angle >= threshold else {
+            aboveThresholdSince = nil
+            return
+        }
+        let now = CACurrentMediaTime()
+        let since = aboveThresholdSince ?? now
+        aboveThresholdSince = since
+        if now - since >= LidEffectPolicy.reArmDwell {
+            isReArmed = true
+            aboveThresholdSince = nil
+        }
     }
 
     private var effectPolicy: LidEffectPolicy {
@@ -334,6 +380,7 @@ final class LidController: ObservableObject {
             predictedAngle: predictedAngle(),
             riseSinceLowest: angle - lowestRunAngle,
             hasBeenAboveThreshold: peakAngle >= threshold,
+            isReArmed: isReArmed,
             wasClosingRecently: motionIntent.wasClosingRecently(
                 at: now,
                 memoryDuration: Self.closingMemory
@@ -484,6 +531,8 @@ final class LidController: ObservableObject {
         } else {
             snapshotter.discard()
             timeoutReferenceAngle = nil
+            isReArmed = false
+            aboveThresholdSince = nil
             beginClosingOut()
         }
     }
@@ -638,7 +687,7 @@ final class LidController: ObservableObject {
             applyVisual(angle: visualAngle.value)
             return
         }
-        // At or above the threshold the picture is already flat, so a lid
+        // At or above the start angle the picture is already flat, so a lid
         // that opened past it finishes at once.
         let settled = visualAngle.value >= target - Self.closingOutSettleEpsilon
         let timedOut = now - closingOutStartedAt > Self.closingOutMaxDuration
@@ -647,7 +696,7 @@ final class LidController: ObservableObject {
             return
         }
         // The frame that fades out must match the screen behind it exactly,
-        // so land on the threshold itself rather than just short of it.
+        // so land on the start angle itself rather than just short of it.
         visualAngle.reset(to: target)
         applyVisual(angle: target)
         finishClosingOut()
@@ -739,6 +788,8 @@ final class LidController: ObservableObject {
         motionIntent.reset()
         openDwell.reset()
         peakAngle = 0
+        isReArmed = true
+        aboveThresholdSince = nil
         timeoutReferenceAngle = nil
         timeoutAwaitingRelease = false
         wasTimeoutEnabled = false

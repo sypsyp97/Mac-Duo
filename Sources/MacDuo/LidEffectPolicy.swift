@@ -66,6 +66,22 @@ struct LidEffectPolicy {
     /// effect on and off.
     static let minimumReleaseRise: Double = 1.5
 
+    /// How far above the start angle the lid must go before a run that has
+    /// just ended may start another.
+    ///
+    /// Releasing is direction-aware, so opening across the start angle ends
+    /// the effect the moment it is crossed. Closing back across it started a
+    /// new one just as promptly, which left the band between them zero degrees
+    /// wide: rocking the lid around the start angle replayed the whole fade
+    /// out, ease back and fade in, over and again. Measured on a real lid at a
+    /// 105 degree start angle, runs ended at 106 and restarted at 102 within
+    /// 633 ms.
+    static let reArmRise: Double = 3
+
+    /// Or, for a lid that cannot reach that because the start angle is near
+    /// the hinge's limit, this long held at or above the start angle.
+    static let reArmDwell: TimeInterval = 0.4
+
     func wantsEffect(
         isEnabled: Bool,
         isActive: Bool,
@@ -73,6 +89,7 @@ struct LidEffectPolicy {
         predictedAngle: Double,
         riseSinceLowest: Double,
         hasBeenAboveThreshold: Bool,
+        isReArmed: Bool,
         wasClosingRecently: Bool,
         isClearlyOpening: Bool,
         hasDwelledOpen: Bool,
@@ -102,6 +119,7 @@ struct LidEffectPolicy {
         // A resting or opening lid below the threshold must not start the
         // effect, including while an older closing observation is remembered.
         return hasBeenAboveThreshold
+            && isReArmed
             && wasClosingRecently
             && !isClearlyOpening
             && predictedAngle <= threshold
