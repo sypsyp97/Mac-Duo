@@ -3,6 +3,31 @@
 All notable changes to this fork. Kept in the style of
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.1]
+
+### Changed
+
+- **The sensor's rate is measured rather than written down.** The app polls at twice whatever the
+  lid sensor turns out to run at, measured at launch on its own handle off the main thread: 9.1 Hz
+  here, so 18.3 Hz of polling. Twice is the floor that still catches every change; faster returns
+  values already seen and shortens the interval the velocity estimate divides by, which makes that
+  estimate noisier for no new information — and that velocity decides when the effect starts and
+  ends. Worth measuring rather than fixing: the same machine reported 8.2 Hz to a standalone probe
+  and 9.1 Hz to the app within the hour.
+- Confirmed on the machine: the effect no longer replays itself when the lid is rocked around the
+  start angle. That was the re-arm added in 1.0.0; polling more slowly helps for the reason above.
+
+### Fixed
+
+- `build.sh` removed only the bundle it was about to write, so renaming the app left the old one in
+  `build/` and Spotlight offered three copies, two of them build output. It now clears every `.app`
+  there and marks the directory so Spotlight skips it.
+
+### Removed
+
+- The VS Code and Zed configs, which were upstream's. They still worked, since they name SwiftPM
+  products rather than the app, but nobody here uses either.
+
 ## [1.0.0]
 
 First release under this name. It is a fork of
