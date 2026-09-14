@@ -107,6 +107,12 @@ struct SettingsView: View {
                 help: localized("Off holds the frame from when the effect started.")
             )
             .disabled(!preferences.isEnabled)
+            toggleRow(
+                localized("Physical optics"),
+                isOn: $preferences.isPhysicalOptics,
+                help: localized("Takes the focus and the light from where the picture is, instead of a fixed gradient.")
+            )
+            .disabled(!preferences.isEnabled)
         }
     }
 
@@ -121,10 +127,14 @@ struct SettingsView: View {
                 localized("Start angle"), value: $preferences.thresholdAngle, in: 5...130, format: "%.0f°",
                 help: localized("The effect starts at this angle.")
             )
-            slider(
-                localized("Full effect after"), value: $preferences.blurSpan, in: 5...60, format: "%.0f°",
-                help: localized("Degrees of further closing to reach full strength.")
-            )
+            // Under physical optics the strength comes from how far the
+            // picture has turned, so this curve is not consulted at all.
+            if !preferences.isPhysicalOptics {
+                slider(
+                    localized("Full effect after"), value: $preferences.blurSpan, in: 5...60, format: "%.0f°",
+                    help: localized("Degrees of further closing to reach full strength.")
+                )
+            }
         }
     }
 
@@ -132,20 +142,27 @@ struct SettingsView: View {
         group(localized("Look")) {
             slider(
                 localized("Blur"), value: $preferences.maxBlurRadius, in: 10...160, format: "%.0f pt",
-                help: localized("Blur radius at the far edge.")
-            )
-            slider(
-                localized("Blur spread"), value: $preferences.blurEvenness, in: 0...1, format: "%.0f%%", scale: 100,
-                help: localized("0 blurs the far edge only, 100 the whole picture.")
+                help: preferences.isPhysicalOptics
+                    ? localized("How wide the lens opens. Larger throws the picture further out of focus.")
+                    : localized("Blur radius at the far edge.")
             )
             slider(
                 localized("Dimming"), value: $preferences.maxDim, in: 0...1, format: "%.0f%%", scale: 100,
-                help: localized("How dark the far edge goes.")
+                help: preferences.isPhysicalOptics
+                    ? localized("How much of the light the picture actually loses is applied.")
+                    : localized("How dark the far edge goes.")
             )
-            slider(
-                localized("Dimming spread"), value: $preferences.dimReach, in: 0.2...1, format: "%.0f%%", scale: 100,
-                help: localized("Everything above this height goes fully dark.")
-            )
+            // Both shapes are replaced by the geometry under physical optics.
+            if !preferences.isPhysicalOptics {
+                slider(
+                    localized("Blur spread"), value: $preferences.blurEvenness, in: 0...1, format: "%.0f%%", scale: 100,
+                    help: localized("0 blurs the far edge only, 100 the whole picture.")
+                )
+                slider(
+                    localized("Dimming spread"), value: $preferences.dimReach, in: 0.2...1, format: "%.0f%%", scale: 100,
+                    help: localized("Everything above this height goes fully dark.")
+                )
+            }
         }
     }
 

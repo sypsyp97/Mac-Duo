@@ -21,6 +21,8 @@ public enum DepthShaders {
         float4 paddedAndBlur;    // padded size, max radius in pixels, blur strength
         float4 shape;            // blur floor, max dim, pixel scale, max level
         float4 light;            // dim floor, dim strength, dim reach, unused
+        float4 optics0;          // sin and cos of the separation, eye along and depth
+        float4 optics1;          // half width, circle-of-confusion scale, physical flag, unused
     };
 
     vertex float4 depthVertex(uint vertexID [[vertex_id]]) {
@@ -65,15 +67,58 @@ public enum DepthShaders {
         float2 texCoord = float2(unit.x, 1.0 - unit.y);
 
         float height = clamp(picturePoint.y / screenSize.y, 0.0, 1.0);
-        float blur = strength * (blurFloor + (1.0 - blurFloor) * height);
-        // Naming this `level` would shadow Metal's level() selector.
-        float mipLevel = clamp(log2(max(blur * maxRadius, 1.0)), 0.0, maxLevel);
+        float physical = uniforms.optics1.z;
 
+        // How wide a footprint one screen pixel covers in the picture. Without
+        // it the receding half is minified below one texel per pixel and
+        // shimmers, which reads as the picture being painted on rather than
+        // lying in space.
+        float2 dpdx = dfdx(picturePoint);
+        float2 dpdy = dfdy(picturePoint);
+        float footprint = max(length(dpdx), length(dpdy)) * pixelScale;
+
+        float blurRadius;
+        float fade;
+        if (physical > 0.5) {
+            float sinSep = uniforms.optics0.x;
+            float cosSep = uniforms.optics0.y;
+            float along = uniforms.optics0.z;
+            float depth = uniforms.optics0.w;
+            float halfWidth = uniforms.optics1.x;
+            float cocScale = uniforms.optics1.y;
+
+            // The glass axes: x across, y along the glass from the hinge, z
+            // away from it. The eye is focused on the glass, so a picture
+            // still lying on it is sharp everywhere and the defocus grows out
+            // of the turn rather than out of a curve.
+            float3 eye = float3(halfWidth, along, depth);
+            float3 onPicture = float3(picturePoint.x, picturePoint.y * cosSep, picturePoint.y * sinSep);
+            float3 onGlass = float3(picturePoint.x, picturePoint.y, 0.0);
+            float toPicture = max(distance(eye, onPicture), 1e-3);
+            float toGlass = max(distance(eye, onGlass), 1e-3);
+
+            float circleOfConfusion = clamp(abs(1.0 / toGlass - 1.0 / toPicture) * cocScale, 0.0, 1.0);
+            blurRadius = circleOfConfusion * maxRadius;
+
+            // Lambert against the turned panel, then inverse square. Both are
+            // 1 while the picture lies on the glass, so this too starts from
+            // no effect at all.
+            float3 normal = float3(0.0, -sinSep, cosSep);
+            float3 toEye = normalize(eye - onPicture);
+            float lambert = max(dot(normal, toEye), 0.0);
+            float falloff = clamp(lambert * (toGlass * toGlass) / (toPicture * toPicture), 0.0, 1.0);
+            fade = 1.0 - falloff;
+        } else {
+            blurRadius = strength * (blurFloor + (1.0 - blurFloor) * height) * maxRadius;
+            // smoothstep rather than a clamped ratio, so the height where the
+            // dimming reaches full strength leaves no visible edge.
+            float spread = smoothstep(0.0, max(dimReach, 0.02), height);
+            fade = dimStrength * (dimFloor + (1.0 - dimFloor) * spread);
+        }
+
+        // Naming this `level` would shadow Metal's level() selector.
+        float mipLevel = clamp(log2(max(max(blurRadius, footprint), 1.0)), 0.0, maxLevel);
         float4 colour = picture.sample(linearSampler, texCoord, level(mipLevel));
-        // smoothstep rather than a clamped ratio, so the height where the
-        // dimming reaches full strength leaves no visible edge.
-        float spread = smoothstep(0.0, max(dimReach, 0.02), height);
-        float fade = dimStrength * (dimFloor + (1.0 - dimFloor) * spread);
         // The sample is linear light. Raising the factor to 2.2 keeps the
         // dimming setting a fraction of the encoded brightness.
         colour.rgb *= pow(1.0 - maxDim * fade, 2.2);

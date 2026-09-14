@@ -152,6 +152,8 @@ struct Uniforms {
     var paddedAndBlur: SIMD4<Float>
     var shape: SIMD4<Float>
     var light: SIMD4<Float>
+    var optics0: SIMD4<Float>
+    var optics1: SIMD4<Float>
 }
 
 // A lid part way through its travel: the geometry is tilted and the blur is
@@ -165,6 +167,14 @@ let corners = geometry.corners(
     recession: 1,
     screenSize: screenSize
 )
+let solvedFrame = geometry.frame(
+    startAngle: 90,
+    currentAngle: 60,
+    viewingDistanceRatio: 6,
+    recession: 1,
+    screenSize: screenSize
+)
+let optics = DepthOptics(frame: solvedFrame, geometry: geometry, screenSize: screenSize)
 let inverse = Homography.matrix(
     width: Double(screenSize.width),
     height: Double(screenSize.height),
@@ -190,7 +200,10 @@ var uniforms = Uniforms(
         Float(maxBlurRadius * Double(pixelScale)), 0.5
     ),
     shape: SIMD4(0, 1, Float(pixelScale), Float(levels - 1)),
-    light: SIMD4(0.2, 0.5, 0.7, 0)
+    light: SIMD4(0.2, 0.5, 0.7, 0),
+    optics0: SIMD4(Float(optics.sinSeparation), Float(optics.cosSeparation),
+                   Float(optics.along), Float(optics.depth)),
+    optics1: SIMD4(Float(optics.halfWidth), Float(optics.cocScale), 1, 0)
 )
 
 let pyramid = MPSImageGaussianPyramid(device: device, centerWeight: 0.375)

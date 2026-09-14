@@ -218,6 +218,13 @@ final class DepthOverlay {
     func update(progress: Double, currentAngle: Double, tuning: DepthTuning) {
         guard let renderer, renderer.isReady else { return }
         self.tuning = tuning
+        let solved = geometry.frame(
+            startAngle: startAngle,
+            currentAngle: currentAngle,
+            viewingDistanceRatio: tuning.viewingDistance,
+            recession: tuning.recession,
+            screenSize: screenSize
+        )
         renderer.render(
             corners: geometry.corners(
                 startAngle: startAngle,
@@ -232,7 +239,10 @@ final class DepthOverlay {
             dimHingeFloor: gradient.dimHingeFloor,
             dimReach: tuning.dimReach,
             maxBlurRadius: tuning.maxBlurRadius,
-            maxDim: tuning.maxDim
+            maxDim: tuning.maxDim,
+            optics: tuning.isPhysicalOptics
+                ? DepthOptics(frame: solved, geometry: geometry, screenSize: screenSize)
+                : nil
         )
     }
 
