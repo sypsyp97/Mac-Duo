@@ -50,6 +50,7 @@ if [[ "$SIGN_IDENTITY" == - ]]; then
   TIMESTAMP=--timestamp=none
 fi
 codesign --force --options runtime "$TIMESTAMP" \
+  --entitlements Resources/MacDuo.entitlements \
   --sign "$SIGN_IDENTITY" "$BUNDLE"
 codesign --verify --strict --verbose=1 "$BUNDLE"
 
