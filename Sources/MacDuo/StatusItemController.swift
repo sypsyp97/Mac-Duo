@@ -59,6 +59,16 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
     }
 
+    /// Shows the panel, whoever asked. An accessory app has no window for
+    /// the Dock or Finder to raise, so opening it again does nothing unless
+    /// something puts this up.
+    func showPanel() {
+        guard let button = statusItem.button, !popover.isShown else { return }
+        NSApp.activate()
+        anchor(to: button)
+        popover.contentViewController?.view.window?.makeKey()
+    }
+
     @objc private func togglePopover(_ sender: Any?) {
         guard let button = statusItem.button else { return }
         if popover.isShown {

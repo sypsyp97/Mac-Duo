@@ -661,11 +661,26 @@ final class LidController: ObservableObject {
     /// solved against. `nil` when macOS will not report a physical size.
     private var tuning: DepthTuning {
         guard let screen = NSScreen.builtIn, let displayID = screen.displayID else {
-            return DepthTuning()
+            return DepthTuning(
+                strength: preferences.effectStrength,
+                eyeDistanceMillimetres: preferences.eyeDistance * 10,
+                eyeHeightMillimetres: preferences.eyeHeight * 10
+            )
         }
         let millimetres = CGDisplayScreenSize(displayID)
-        guard millimetres.width > 0, screen.frame.width > 0 else { return DepthTuning() }
-        return DepthTuning(millimetresPerPoint: millimetres.width / Double(screen.frame.width))
+        guard millimetres.width > 0, screen.frame.width > 0 else {
+            return DepthTuning(
+                strength: preferences.effectStrength,
+                eyeDistanceMillimetres: preferences.eyeDistance * 10,
+                eyeHeightMillimetres: preferences.eyeHeight * 10
+            )
+        }
+        return DepthTuning(
+            millimetresPerPoint: millimetres.width / Double(screen.frame.width),
+            strength: preferences.effectStrength,
+            eyeDistanceMillimetres: preferences.eyeDistance * 10,
+            eyeHeightMillimetres: preferences.eyeHeight * 10
+        )
     }
 
     // MARK: - System events

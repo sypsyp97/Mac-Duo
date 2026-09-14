@@ -21,13 +21,20 @@ struct SettingsView: View {
     @State private var needsLoginApproval = SMAppService.mainApp.status == .requiresApproval
     @State private var hasScreenPermission = CGPreflightScreenCaptureAccess()
     @State private var settingsOpenFailed = false
+    @State private var isMeasuring = false
+    @State private var measurement: String?
 
     var onQuit: () -> Void
 
     private static let width: CGFloat = 300
     private static let inset: CGFloat = 14
-    private static let bodyHeight: CGFloat = 400
+    /// Only a cap. The panel is short now, and a fixed height left it mostly
+    /// empty; the scroll view only earns its keep on a very small screen.
+    private static let maximumBodyHeight: CGFloat = 400
     private static let authorURL = URL(string: "https://github.com/sypsyp97")!
+    private static let cameraSettingsURL = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+    )!
     private static let screenRecordingSettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_ScreenCapture"
     )!
@@ -51,7 +58,8 @@ struct SettingsView: View {
                     .padding(.horizontal, Self.inset)
                     .padding(.vertical, 10)
                 }
-                .frame(height: Self.bodyHeight)
+                .frame(maxHeight: Self.maximumBodyHeight)
+                .fixedSize(horizontal: false, vertical: true)
             } else {
                 unavailableNotice
                     .padding(.horizontal, Self.inset)
@@ -117,7 +125,32 @@ struct SettingsView: View {
             )
             slider(
                 localized("Start angle"), value: $preferences.thresholdAngle, in: 5...130, format: "%.0f°",
-                help: localized("The effect starts at this angle. Everything else is solved from the lid and the display.")
+                help: localized("The effect starts at this angle.")
+            )
+            slider(
+                localized("Viewing distance"), value: $preferences.eyeDistance, in: 30...100, format: "%.0f cm",
+                help: localized("Drag until the picture stops leaning away. The number is where that puts your eyes; you do not have to measure it.")
+            )
+            slider(
+                localized("Eye height"), value: $preferences.eyeHeight, in: -10...30, format: "%.0f cm",
+                help: localized("How far your eyes are above the middle of the screen.")
+            )
+            HStack {
+                Button(localized("Remember where I sit")) { calibrate() }
+                    .disabled(isMeasuring)
+                Button(localized("Follow me")) { measure() }
+                    .disabled(isMeasuring || preferences.cameraCalibration <= 0)
+                Spacer()
+            }
+            .controlSize(.small)
+            description(
+                measurement ?? (preferences.cameraCalibration > 0
+                    ? localized("The camera will move the slider to match wherever you sit.")
+                    : localized("Drag the slider until the picture stops leaning, then let the camera remember that. You never have to know the number."))
+            )
+            slider(
+                localized("Strength"), value: $preferences.effectStrength, in: 0...2, format: "%.0f%%", scale: 100,
+                help: localized("How hard the blur and the dimming are pushed. The shape of the picture is solved from the lid and the display either way.")
             )
         }
     }
@@ -272,6 +305,64 @@ struct SettingsView: View {
                 .accessibilityLabel(title)
                 .accessibilityValue(reading)
             description(help)
+        }
+    }
+
+    /// Looks once through the camera and writes what it finds into the two
+    /// sliders. The camera lives in the lid, so this cannot run while the
+    /// effect does; it is a calibration, not a live input.
+    /// Anchors the camera to a distance the viewer has confirmed, which is
+    /// the only way to learn it: the delivered frame's field of view is not
+    /// discoverable, and neither is anyone's pupil spacing.
+    private func calibrate() {
+        isMeasuring = true
+        measurement = localized("Sit back, the way you normally do…")
+        Task { @MainActor in
+            defer { isMeasuring = false }
+            do {
+                // Reaching for the button pulls a viewer forward, and the
+                // whole point is to anchor on where they normally sit.
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                let separation = try await EyeMeasurement.pupilSeparation()
+                preferences.cameraCalibration = preferences.eyeDistance * 10 * separation
+                measurement = localized("Remembered. Move around and press Follow me.")
+            } catch {
+                measurement = error.localizedDescription
+                if case EyeMeasurement.Failure.denied = error {
+                    NSWorkspace.shared.open(Self.cameraSettingsURL)
+                }
+            }
+        }
+    }
+
+    private func measure() {
+        guard let screen = NSScreen.builtIn, let displayID = screen.displayID else { return }
+        let millimetres = CGDisplayScreenSize(displayID)
+        guard millimetres.width > 0, screen.frame.width > 0 else { return }
+        let perPoint = millimetres.width / Double(screen.frame.width)
+        isMeasuring = true
+        measurement = localized("Sit back, the way you normally do…")
+        Task { @MainActor in
+            defer { isMeasuring = false }
+            do {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                let result = try await EyeMeasurement.measure(
+                    calibration: preferences.cameraCalibration,
+                    screenHeightPoints: Double(screen.frame.height),
+                    millimetresPerPoint: perPoint
+                )
+                preferences.eyeDistance = min(max(result.distanceMillimetres / 10, 30), 100)
+                preferences.eyeHeight = min(max(result.heightAboveCentreMillimetres / 10, -10), 30)
+                measurement = String(
+                    format: localized("Measured from %d frames."),
+                    result.samples
+                )
+            } catch {
+                measurement = error.localizedDescription
+                if case EyeMeasurement.Failure.denied = error {
+                    NSWorkspace.shared.open(Self.cameraSettingsURL)
+                }
+            }
         }
     }
 

@@ -22,6 +22,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Double-clicking the app in Finder, or its Dock icon, reaches this.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        statusItemController?.showPanel()
+        return true
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         controller?.stop()
     }
