@@ -18,6 +18,7 @@ struct SettingsView: View {
     }
 
     @State private var launchesAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var needsLoginApproval = SMAppService.mainApp.status == .requiresApproval
     @State private var hasScreenPermission = CGPreflightScreenCaptureAccess()
     @State private var settingsOpenFailed = false
 
@@ -65,9 +66,13 @@ struct SettingsView: View {
                 .padding(.bottom, 12)
         }
         .frame(width: Self.width)
-        .onAppear { hasScreenPermission = CGPreflightScreenCaptureAccess() }
+        .onAppear {
+            hasScreenPermission = CGPreflightScreenCaptureAccess()
+            launchesAtLogin = SMAppService.mainApp.status == .enabled
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasScreenPermission = CGPreflightScreenCaptureAccess()
+            launchesAtLogin = SMAppService.mainApp.status == .enabled
         }
     }
 
@@ -174,10 +179,16 @@ struct SettingsView: View {
                 .accessibilityLabel(localized("Language"))
             }
             toggleRow(localized("Show angle in menu bar"), isOn: $preferences.showsAngleInMenuBar, help: nil)
-            toggleRow(localized("Launch at login"), isOn: $launchesAtLogin, help: nil)
-                .onChange(of: launchesAtLogin) { _, newValue in
-                    setLaunchAtLogin(newValue)
-                }
+            toggleRow(
+                localized("Launch at login"),
+                isOn: $launchesAtLogin,
+                help: needsLoginApproval
+                    ? localized("Allow Mac Duo under Login Items & Extensions to finish turning this on.")
+                    : nil
+            )
+            .onChange(of: launchesAtLogin) { _, newValue in
+                setLaunchAtLogin(newValue)
+            }
             HStack {
                 Button(localized("Reset")) { preferences.resetToDefaults() }
                 Spacer()
@@ -311,6 +322,15 @@ struct SettingsView: View {
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {
+        defer {
+            // Always from macOS, never from what was asked for. `register()`
+            // succeeds into `.requiresApproval` when the user has yet to allow
+            // background items, and a switch left on in that state promises a
+            // launch that will not happen.
+            let status = SMAppService.mainApp.status
+            launchesAtLogin = status == .enabled
+            needsLoginApproval = status == .requiresApproval
+        }
         do {
             if enabled {
                 try SMAppService.mainApp.register()
@@ -318,7 +338,9 @@ struct SettingsView: View {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            launchesAtLogin = SMAppService.mainApp.status == .enabled
+            Diagnostics.geometry.error(
+                "login item \(enabled ? "register" : "unregister", privacy: .public) failed: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 }

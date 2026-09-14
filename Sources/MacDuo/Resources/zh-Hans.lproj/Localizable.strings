@@ -36,3 +36,4 @@
 "Language" = "语言";
 "System" = "跟随系统";
 "Chinese (Simplified)" = "简体中文";
+"Allow Mac Duo under Login Items & Extensions to finish turning this on." = "还需在「登录项与扩展」中允许 Mac Duo，此开关才真正生效。";
