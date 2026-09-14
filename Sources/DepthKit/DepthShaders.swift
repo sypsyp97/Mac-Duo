@@ -7,8 +7,8 @@ import Foundation
 /// chosen by the blur wanted there. The texture already holds the picture on
 /// black, so the two blur together and the picture edge needs no special
 /// handling.
-enum DepthShaders {
-    static let source = """
+public enum DepthShaders {
+    public static let source = """
     #include <metal_stdlib>
     using namespace metal;
 

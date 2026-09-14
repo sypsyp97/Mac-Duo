@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import DepthKit
 import LidAngleKit
 import QuartzCore
 

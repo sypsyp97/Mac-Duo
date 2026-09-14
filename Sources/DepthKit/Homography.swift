@@ -2,14 +2,14 @@ import QuartzCore
 import simd
 
 /// Projective mapping of a rectangle onto an arbitrary quadrilateral.
-enum Homography {
+public enum Homography {
 
     /// Maps the rectangle from (0, 0) to (`width`, `height`) onto `corners`,
     /// listed bottom-left, bottom-right, top-right, top-left.
     ///
     /// Column-vector convention: `screen = matrix * (x, y, 1)`, divided by the
     /// third component.
-    static func matrix(width: Double, height: Double, to corners: [SIMD2<Double>]) -> simd_double3x3 {
+    public static func matrix(width: Double, height: Double, to corners: [SIMD2<Double>]) -> simd_double3x3 {
         precondition(corners.count == 4, "four corners expected")
         let (x0, y0) = (corners[0].x, corners[0].y)
         let (x1, y1) = (corners[1].x, corners[1].y)
@@ -45,7 +45,7 @@ enum Homography {
 
     /// The same mapping for Core Animation, which multiplies row vectors, so
     /// the matrix goes in transposed.
-    static func transform(width: CGFloat, height: CGFloat, to corners: [CGPoint]) -> CATransform3D {
+    public static func transform(width: CGFloat, height: CGFloat, to corners: [CGPoint]) -> CATransform3D {
         let m = matrix(
             width: Double(width),
             height: Double(height),
