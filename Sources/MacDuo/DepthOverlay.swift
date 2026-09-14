@@ -48,7 +48,6 @@ final class DepthOverlay {
     private var screenSize: CGSize = .zero
     private var startAngle: Double = 90
     private var geometry = DepthGeometry()
-    private var gradient = BlurGradient()
     private var tuning = DepthTuning()
     private var fadeIn: TimeInterval = 0.07
     private var hasRevealed = false
@@ -169,7 +168,7 @@ final class DepthOverlay {
                     guard let self, self.buildToken == token, self.window === window,
                           let picture else { return }
                     renderer.adopt(picture)
-                    self.update(progress: 0, currentAngle: self.startAngle, tuning: self.tuning)
+                    self.update(currentAngle: self.startAngle, tuning: self.tuning)
                     self.reveal()
                 }
             }
@@ -215,34 +214,22 @@ final class DepthOverlay {
         }
     }
 
-    func update(progress: Double, currentAngle: Double, tuning: DepthTuning) {
+    func update(currentAngle: Double, tuning: DepthTuning) {
         guard let renderer, renderer.isReady else { return }
         self.tuning = tuning
+        let ratio = tuning.viewingDistanceRatio(screenHeightPoints: Double(screenSize.height))
         let solved = geometry.frame(
             startAngle: startAngle,
             currentAngle: currentAngle,
-            viewingDistanceRatio: tuning.viewingDistance,
-            recession: tuning.recession,
+            viewingDistanceRatio: ratio,
             screenSize: screenSize
         )
         renderer.render(
-            corners: geometry.corners(
-                startAngle: startAngle,
-                currentAngle: currentAngle,
-                viewingDistanceRatio: tuning.viewingDistance,
-                recession: tuning.recession,
+            optics: DepthOptics(
+                frame: solved,
+                millimetresPerPoint: tuning.millimetresPerPoint,
                 screenSize: screenSize
-            ),
-            blurStrength: gradient.blurStrength(progress: progress),
-            dimStrength: gradient.dimStrength(progress: progress),
-            hingeFloor: tuning.blurEvenness,
-            dimHingeFloor: gradient.dimHingeFloor,
-            dimReach: tuning.dimReach,
-            maxBlurRadius: tuning.maxBlurRadius,
-            maxDim: tuning.maxDim,
-            optics: tuning.isPhysicalOptics
-                ? DepthOptics(frame: solved, geometry: geometry, screenSize: screenSize)
-                : nil
+            )
         )
     }
 

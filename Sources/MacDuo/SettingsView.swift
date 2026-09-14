@@ -47,8 +47,6 @@ struct SettingsView: View {
                             permissionNotice
                         }
                         startGroup
-                        lookGroup
-                        perspectiveGroup
                     }
                     .padding(.horizontal, Self.inset)
                     .padding(.vertical, 10)
@@ -107,12 +105,6 @@ struct SettingsView: View {
                 help: localized("Off holds the frame from when the effect started.")
             )
             .disabled(!preferences.isEnabled)
-            toggleRow(
-                localized("Physical optics"),
-                isOn: $preferences.isPhysicalOptics,
-                help: localized("Takes the focus and the light from where the picture is, instead of a fixed gradient.")
-            )
-            .disabled(!preferences.isEnabled)
         }
     }
 
@@ -125,56 +117,7 @@ struct SettingsView: View {
             )
             slider(
                 localized("Start angle"), value: $preferences.thresholdAngle, in: 5...130, format: "%.0f°",
-                help: localized("The effect starts at this angle.")
-            )
-            // Under physical optics the strength comes from how far the
-            // picture has turned, so this curve is not consulted at all.
-            if !preferences.isPhysicalOptics {
-                slider(
-                    localized("Full effect after"), value: $preferences.blurSpan, in: 5...60, format: "%.0f°",
-                    help: localized("Degrees of further closing to reach full strength.")
-                )
-            }
-        }
-    }
-
-    private var lookGroup: some View {
-        group(localized("Look")) {
-            slider(
-                localized("Blur"), value: $preferences.maxBlurRadius, in: 10...160, format: "%.0f pt",
-                help: preferences.isPhysicalOptics
-                    ? localized("How wide the lens opens. Larger throws the picture further out of focus.")
-                    : localized("Blur radius at the far edge.")
-            )
-            slider(
-                localized("Dimming"), value: $preferences.maxDim, in: 0...1, format: "%.0f%%", scale: 100,
-                help: preferences.isPhysicalOptics
-                    ? localized("How much of the light the picture actually loses is applied.")
-                    : localized("How dark the far edge goes.")
-            )
-            // Both shapes are replaced by the geometry under physical optics.
-            if !preferences.isPhysicalOptics {
-                slider(
-                    localized("Blur spread"), value: $preferences.blurEvenness, in: 0...1, format: "%.0f%%", scale: 100,
-                    help: localized("0 blurs the far edge only, 100 the whole picture.")
-                )
-                slider(
-                    localized("Dimming spread"), value: $preferences.dimReach, in: 0.2...1, format: "%.0f%%", scale: 100,
-                    help: localized("Everything above this height goes fully dark.")
-                )
-            }
-        }
-    }
-
-    private var perspectiveGroup: some View {
-        group(localized("Perspective")) {
-            slider(
-                localized("Lean back"), value: $preferences.recession, in: 0...3, format: "%.1f×",
-                help: localized("Degrees of lean per degree of closing. 1 holds it still.")
-            )
-            slider(
-                localized("Perspective"), value: perspective, in: 0...1, format: "%.0f%%", scale: 100,
-                help: localized("0 keeps the sides parallel, 100 converges sharply.")
+                help: localized("The effect starts at this angle. Everything else is solved from the lid and the display.")
             )
         }
     }
@@ -250,12 +193,6 @@ struct SettingsView: View {
         }
     }
 
-    private var perspective: Binding<Double> {
-        Binding(
-            get: { (Preferences.farthestEye - preferences.viewingDistance) / Preferences.eyeRange },
-            set: { preferences.viewingDistance = Preferences.farthestEye - $0 * Preferences.eyeRange }
-        )
-    }
 
     private var permissionNotice: some View {
         VStack(alignment: .leading, spacing: 6) {

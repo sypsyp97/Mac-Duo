@@ -21,9 +21,7 @@ final class DepthRenderer {
         var column1: SIMD4<Float>
         var column2: SIMD4<Float>
         var screenAndOrigin: SIMD4<Float>
-        var paddedAndBlur: SIMD4<Float>
-        var shape: SIMD4<Float>
-        var light: SIMD4<Float>
+        var paddedAndScale: SIMD4<Float>
         var optics0: SIMD4<Float>
         var optics1: SIMD4<Float>
     }
@@ -443,19 +441,7 @@ final class DepthRenderer {
         texture = nil
     }
 
-    /// - Parameter corners: the picture corners projected onto the screen, in
-    ///   points, listed bottom-left, bottom-right, top-right, top-left.
-    func render(
-        corners: [CGPoint],
-        blurStrength: Double,
-        dimStrength: Double,
-        hingeFloor: Double,
-        dimHingeFloor: Double,
-        dimReach: Double,
-        maxBlurRadius: Double,
-        maxDim: Double,
-        optics: DepthOptics?
-    ) {
+    func render(optics: DepthOptics) {
         guard let commands = queue.makeCommandBuffer() else { return }
         absorbPending(into: commands)
         guard let texture, screenSize.width > 0, screenSize.height > 0,
@@ -464,12 +450,7 @@ final class DepthRenderer {
             return
         }
 
-        let forward = Homography.matrix(
-            width: Double(screenSize.width),
-            height: Double(screenSize.height),
-            to: corners.map { SIMD2(Double($0.x), Double($0.y)) }
-        )
-        let inverse = forward.inverse
+        let inverse = optics.screenToPicture
 
         func column(_ index: Int) -> SIMD4<Float> {
             let c = inverse[index]
@@ -483,20 +464,15 @@ final class DepthRenderer {
                 Float(screenSize.width), Float(screenSize.height),
                 Float(paddedOrigin.x), Float(paddedOrigin.y)
             ),
-            paddedAndBlur: SIMD4(
+            paddedAndScale: SIMD4(
                 Float(paddedSize.width), Float(paddedSize.height),
-                Float(maxBlurRadius * Double(pixelScale)), Float(blurStrength)
+                Float(pixelScale), maxLevel
             ),
-            shape: SIMD4(Float(hingeFloor), Float(maxDim), Float(pixelScale), maxLevel),
-            light: SIMD4(Float(dimHingeFloor), Float(dimStrength), Float(dimReach), 0),
             optics0: SIMD4(
-                Float(optics?.sinSeparation ?? 0), Float(optics?.cosSeparation ?? 1),
-                Float(optics?.along ?? 0), Float(optics?.depth ?? 1)
+                Float(optics.sinSeparation), Float(optics.cosSeparation),
+                Float(optics.along), Float(optics.depth)
             ),
-            optics1: SIMD4(
-                Float(optics?.halfWidth ?? 0), Float(optics?.cocScale ?? 0),
-                optics == nil ? 0 : 1, 0
-            )
+            optics1: SIMD4(Float(optics.halfWidth), Float(optics.pupilRadius), 0, 0)
         )
 
         let pass = MTLRenderPassDescriptor()

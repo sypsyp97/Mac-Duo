@@ -149,9 +149,7 @@ struct Uniforms {
     var column1: SIMD4<Float>
     var column2: SIMD4<Float>
     var screenAndOrigin: SIMD4<Float>
-    var paddedAndBlur: SIMD4<Float>
-    var shape: SIMD4<Float>
-    var light: SIMD4<Float>
+    var paddedAndScale: SIMD4<Float>
     var optics0: SIMD4<Float>
     var optics1: SIMD4<Float>
 }
@@ -160,33 +158,32 @@ struct Uniforms {
 // half strength, which is where the shader samples the widest spread of mip
 // levels.
 let geometry = DepthGeometry()
-let corners = geometry.corners(
-    startAngle: 90,
-    currentAngle: 60,
-    viewingDistanceRatio: 6,
-    recession: 1,
-    screenSize: screenSize
+let millimetresPerPoint: Double? = screen
+    .flatMap { $0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber }
+    .map { CGDisplayScreenSize($0.uint32Value).width / Double(screenSize.width) }
+    .flatMap { $0 > 0 ? $0 : nil }
+let ratio = DepthOptics.viewingDistanceRatio(
+    millimetresPerPoint: millimetresPerPoint,
+    screenHeightPoints: Double(screenSize.height)
 )
 let solvedFrame = geometry.frame(
     startAngle: 90,
     currentAngle: 60,
-    viewingDistanceRatio: 6,
-    recession: 1,
+    viewingDistanceRatio: ratio,
     screenSize: screenSize
 )
-let optics = DepthOptics(frame: solvedFrame, geometry: geometry, screenSize: screenSize)
-let inverse = Homography.matrix(
-    width: Double(screenSize.width),
-    height: Double(screenSize.height),
-    to: corners.map { SIMD2(Double($0.x), Double($0.y)) }
-).inverse
+let optics = DepthOptics(
+    frame: solvedFrame,
+    millimetresPerPoint: millimetresPerPoint,
+    screenSize: screenSize
+)
+let inverse = optics.screenToPicture
 
 func column(_ index: Int) -> SIMD4<Float> {
     let c = inverse[index]
     return SIMD4(Float(c.x), Float(c.y), Float(c.z), 0)
 }
 
-let maxBlurRadius = 135.0
 var uniforms = Uniforms(
     column0: column(0),
     column1: column(1),
@@ -195,15 +192,15 @@ var uniforms = Uniforms(
         Float(screenSize.width), Float(screenSize.height),
         Float(-options.padding), Float(-options.padding)
     ),
-    paddedAndBlur: SIMD4(
+    paddedAndScale: SIMD4(
         Float(paddedSize.width), Float(paddedSize.height),
-        Float(maxBlurRadius * Double(pixelScale)), 0.5
+        Float(pixelScale), Float(levels - 1)
     ),
-    shape: SIMD4(0, 1, Float(pixelScale), Float(levels - 1)),
-    light: SIMD4(0.2, 0.5, 0.7, 0),
-    optics0: SIMD4(Float(optics.sinSeparation), Float(optics.cosSeparation),
-                   Float(optics.along), Float(optics.depth)),
-    optics1: SIMD4(Float(optics.halfWidth), Float(optics.cocScale), 1, 0)
+    optics0: SIMD4(
+        Float(optics.sinSeparation), Float(optics.cosSeparation),
+        Float(optics.along), Float(optics.depth)
+    ),
+    optics1: SIMD4(Float(optics.halfWidth), Float(optics.pupilRadius), 0, 0)
 )
 
 let pyramid = MPSImageGaussianPyramid(device: device, centerWeight: 0.375)
@@ -390,6 +387,14 @@ let result: [String: Any] = [
     "picture_pixels": ["width": paddedWidth, "height": paddedHeight],
     "frame_pixels": ["width": frameWidth, "height": frameHeight],
     "pyramid_levels": levels,
+    "optics": [
+        "millimetres_per_point": millimetresPerPoint ?? 0,
+        "eye_distance_mm": DepthOptics.eyeDistanceMillimetres,
+        "eye_distance_in_screen_heights": ratio,
+        "pupil_mm": DepthOptics.pupilMillimetres,
+        "pupil_radius_points": optics.pupilRadius,
+        "separation_degrees": solvedFrame.separation * 180 / .pi,
+    ],
     "frames": options.frames,
     "copy_and_pyramid_ms": report("absorb", absorbSorted),
     "shader_pass_ms": report("render", renderSorted),

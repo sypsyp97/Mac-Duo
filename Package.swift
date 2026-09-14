@@ -37,7 +37,7 @@ let package = Package(
         ),
         .testTarget(
             name: "MacDuoTests",
-            dependencies: ["MacDuo"],
+            dependencies: ["MacDuo", "DepthKit"],
             path: "Tests/MacDuoTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

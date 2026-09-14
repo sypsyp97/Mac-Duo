@@ -67,6 +67,12 @@ final class LidController: ObservableObject {
     private var closingOutStartedAt: CFTimeInterval = 0
     private var builtInLayout = Layout()
     private var peakAngle: Double = 0
+    /// The lid angle when this run started. The picture is left standing at
+    /// that angle in the room, so the separation is zero on the first frame
+    /// and the overlay fades in over a screen it matches exactly. The
+    /// configured threshold is where the run *starts*, which is a degree or
+    /// two away once the lid is moving.
+    private var runStartAngle: Double = 90
     /// The lowest reading since the effect started. Opening releases only
     /// once the lid has risen `LidEffectPolicy.minimumReleaseRise` above it.
     private var lowestRunAngle: Double = 0
@@ -223,7 +229,9 @@ final class LidController: ObservableObject {
                 preferences.thresholdAngle + preferences.hysteresis + 5,
                 min(preferences.thresholdAngle + 35, 130)
             ),
-            shut: max(preferences.thresholdAngle - preferences.blurSpan * 1.15, 5)
+            // Far enough past the trigger that the sheet has turned well off
+            // the glass by the end of the sweep.
+            shut: max(preferences.thresholdAngle - 60, 5)
         )
         setPollInterval(Self.activePollInterval)
     }
@@ -461,6 +469,7 @@ final class LidController: ObservableObject {
         if active {
             peakAngle = rawAngle
             lowestRunAngle = rawAngle
+            runStartAngle = rawAngle
             openDwell.reset()
             isClosingOut = false
             startedAt = CACurrentMediaTime()
@@ -510,7 +519,7 @@ final class LidController: ObservableObject {
         if preferences.isLivePicture, let screen = NSScreen.builtIn,
            overlay.showLive(
                on: screen,
-               startAngle: preferences.thresholdAngle,
+               startAngle: runStartAngle,
                tuning: tuning,
                fadeIn: Self.fadeInDuration
            ) {
@@ -586,17 +595,12 @@ final class LidController: ObservableObject {
         overlay.show(
             image: image,
             on: screen,
-            startAngle: preferences.thresholdAngle,
+            startAngle: runStartAngle,
             tuning: tuning,
             fadeIn: Self.fadeInDuration
         )
         // The link belongs to the overlay window.
         startDisplayLink()
-    }
-
-    private func blurProgress(for angle: Double) -> Double {
-        let span = max(preferences.blurSpan, 1)
-        return min(max((preferences.thresholdAngle - angle) / span, 0), 1)
     }
 
     // MARK: - Animation
@@ -627,7 +631,7 @@ final class LidController: ObservableObject {
         if let frame = streamer.newFrame() {
             overlay.absorb(frame)
         }
-        let target = isClosingOut ? preferences.thresholdAngle : rawAngle
+        let target = isClosingOut ? runStartAngle : rawAngle
         visualAngle.advance(to: target, dt: dt)
 
         guard isClosingOut else {
@@ -649,22 +653,19 @@ final class LidController: ObservableObject {
         finishClosingOut()
     }
 
-    /// The geometry takes the lid angle itself, so only the blur saturates.
     private func applyVisual(angle: Double) {
-        let progress = blurProgress(for: angle)
-        overlay.update(progress: progress, currentAngle: angle, tuning: tuning)
+        overlay.update(currentAngle: angle, tuning: tuning)
     }
 
+    /// The display's own millimetres per point, which is what the optics are
+    /// solved against. `nil` when macOS will not report a physical size.
     private var tuning: DepthTuning {
-        DepthTuning(
-            viewingDistance: preferences.viewingDistance,
-            recession: preferences.recession,
-            blurEvenness: preferences.blurEvenness,
-            dimReach: preferences.dimReach,
-            maxBlurRadius: preferences.maxBlurRadius,
-            maxDim: preferences.maxDim,
-            isPhysicalOptics: preferences.isPhysicalOptics
-        )
+        guard let screen = NSScreen.builtIn, let displayID = screen.displayID else {
+            return DepthTuning()
+        }
+        let millimetres = CGDisplayScreenSize(displayID)
+        guard millimetres.width > 0, screen.frame.width > 0 else { return DepthTuning() }
+        return DepthTuning(millimetresPerPoint: millimetres.width / Double(screen.frame.width))
     }
 
     // MARK: - System events
