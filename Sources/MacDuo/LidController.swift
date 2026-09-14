@@ -88,14 +88,25 @@ final class LidController: ObservableObject {
     /// The sensor produces a new value only about 8 times a second, so most
     /// polls re-read the same number.
     ///
-    /// 24 rather than 30 on the strength of how it feels, which is the only
-    /// instrument that matters here. The mechanism is most likely the velocity
-    /// estimate: it is taken between consecutive *changed* readings, so the
-    /// poll period quantises the interval it divides by. Polling faster gives
-    /// shorter, noisier intervals, and that velocity feeds the decisions about
-    /// when to start and end the effect. A noisier velocity means twitchier
-    /// triggering, which is exactly what is felt near the start angle.
-    private static let activePollInterval: TimeInterval = 1.0 / 24
+    /// Twice whatever the sensor turns out to run at, measured at launch.
+    ///
+    /// Polling faster than twice its rate buys nothing: the extra reads return
+    /// the number already seen, and they make the velocity estimate worse,
+    /// because that estimate divides by an interval the poll period quantises
+    /// and a shorter interval is a noisier one. That velocity decides when the
+    /// effect starts and stops, so a noisy one is felt as twitchy triggering
+    /// near the start angle. Polling slower risks stepping over a value
+    /// entirely. Twice the rate is the floor that still catches every change.
+    ///
+    /// Measured 8.2 Hz on an M5 Pro, so 16.4. It is measured rather than
+    /// written down because it is a property of a hinge sensor this code has
+    /// only ever seen one of.
+    private var activePollInterval: TimeInterval = 1.0 / 16.4
+
+    /// What the sensor is allowed to turn out to be, so a bad measurement
+    /// cannot leave the app polling uselessly fast or missing readings.
+    private static let pollIntervalRange: ClosedRange<TimeInterval> = (1.0 / 30)...(1.0 / 8)
+
     private static let fadeInDuration: TimeInterval = 0.07
     /// Degrees above the pre-warm zone at which polling speeds up.
     private static let fastPollMargin: Double = 20
@@ -185,6 +196,7 @@ final class LidController: ObservableObject {
         // Before the first poll, which reads it.
         builtInLayout = Layout(displayID: NSScreen.builtIn?.displayID, frame: NSScreen.builtIn?.frame)
         setPollInterval(Self.idlePollInterval)
+        measureSensorRate()
         observeSystemEvents()
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.sypsyp97.MacDuo.preview"),
@@ -252,10 +264,37 @@ final class LidController: ObservableObject {
             // the glass by the end of the sweep.
             shut: max(preferences.thresholdAngle - 60, 5)
         )
-        setPollInterval(Self.activePollInterval)
+        setPollInterval(activePollInterval)
     }
 
     // MARK: - Polling
+
+    /// Asks the sensor how fast it runs, once, and polls at twice that.
+    /// Blocking, so it happens off the main thread and lands when it lands;
+    /// until then the default stands.
+    private func measureSensorRate() {
+        Task.detached(priority: .utility) {
+            guard let hertz = LidAngleSensor.measureUpdateRate() else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                let wanted = 1 / (2 * hertz)
+                let clamped = min(max(wanted, Self.pollIntervalRange.lowerBound),
+                                  Self.pollIntervalRange.upperBound)
+                Diagnostics.lid.notice(
+                    """
+                    sensor updates at \(hertz, format: .fixed(precision: 1)) Hz, \
+                    polling at \(1 / clamped, format: .fixed(precision: 1)) Hz\
+                    \(wanted == clamped ? "" : " (clamped)", privacy: .public)
+                    """
+                )
+                self.activePollInterval = clamped
+                // Take it now if the current rate is the one it replaces.
+                if self.pollInterval != Self.idlePollInterval {
+                    self.setPollInterval(clamped)
+                }
+            }
+        }
+    }
 
     private func setPollInterval(_ interval: TimeInterval) {
         guard pollInterval != interval else { return }
@@ -318,7 +357,7 @@ final class LidController: ObservableObject {
         let prewarmZone = preferences.thresholdAngle + preferences.prewarmCeiling
         let wantsFastPolling = preferences.isEnabled
             && (preview != nil || isActive || angle <= prewarmZone + Self.fastPollMargin)
-        setPollInterval(wantsFastPolling ? Self.activePollInterval : Self.idlePollInterval)
+        setPollInterval(wantsFastPolling ? activePollInterval : Self.idlePollInterval)
     }
 
     /// A run that has ended may not start another until the lid has clearly
@@ -526,7 +565,7 @@ final class LidController: ObservableObject {
             }
             visualAngle.reset(to: rawAngle)
             snapshotter.endPrewarm()
-            setPollInterval(Self.activePollInterval)
+            setPollInterval(activePollInterval)
             presentPicture()
         } else {
             snapshotter.discard()

@@ -97,6 +97,36 @@ public final class LidAngleSensor {
         return degrees
     }
 
+    /// How often the sensor actually produces a new value, in hertz.
+    ///
+    /// It answers every read, but the value behind it only moves on its own
+    /// schedule: measured at 8.2 Hz on an M5 Pro, with the gaps between new
+    /// values varying from 103 ms to 312 ms. Anything that polls it wants to
+    /// know this number rather than assume one, because it is a property of
+    /// the hardware and this code has only ever seen one machine.
+    ///
+    /// Opens its own handle so it can run off the main thread without sharing
+    /// device state, and returns `nil` if there is nothing to measure.
+    /// Blocking: sample it away from the main thread.
+    public static func measureUpdateRate(seconds: Double = 1.2) -> Double? {
+        let probe = LidAngleSensor()
+        guard probe.isAvailable else { return nil }
+        var last: Double?
+        var changes = 0
+        let started = Date()
+        while Date().timeIntervalSince(started) < seconds {
+            if let value = probe.angle() {
+                if let previous = last, value != previous { changes += 1 }
+                last = value
+            }
+            // Fast enough that the sensor, not this loop, is the limit.
+            usleep(2000)
+        }
+        let elapsed = Date().timeIntervalSince(started)
+        guard changes > 1, elapsed > 0 else { return nil }
+        return Double(changes) / elapsed
+    }
+
     // MARK: - Device
 
     private func open() {
