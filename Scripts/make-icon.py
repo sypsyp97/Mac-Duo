@@ -118,9 +118,7 @@ def main():
                 )
         destination = ROOT / "Resources" / "AppIcon.icns"
         subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(destination)], check=True)
-        preview = ROOT / "assets" / "icon.png"
-        icon.resize((512, 512), Image.LANCZOS).save(preview)
-    print(f"wrote {destination} and {preview}")
+    print(f"wrote {destination}")
 
 
 if __name__ == "__main__":

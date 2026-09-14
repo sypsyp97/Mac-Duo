@@ -10,8 +10,6 @@ picture would actually be.
 
 **Available in:** English and Simplified Chinese (简体中文).
 
-<img src="./assets/menu.png" width="400" alt="Mac Duo menu">
-
 </div>
 
 <hr>
