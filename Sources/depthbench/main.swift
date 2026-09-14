@@ -172,11 +172,7 @@ let solvedFrame = geometry.frame(
     viewingDistanceRatio: ratio,
     screenSize: screenSize
 )
-let optics = DepthOptics(
-    frame: solvedFrame,
-    millimetresPerPoint: millimetresPerPoint,
-    screenSize: screenSize
-)
+let optics = DepthOptics(frame: solvedFrame, startAngle: 90, screenSize: screenSize)
 let inverse = optics.screenToPicture
 
 func column(_ index: Int) -> SIMD4<Float> {
@@ -198,9 +194,9 @@ var uniforms = Uniforms(
     ),
     optics0: SIMD4(
         Float(optics.sinSeparation), Float(optics.cosSeparation),
-        Float(optics.along), Float(optics.depth)
+        Float(optics.blurRadius), Float(optics.brightness)
     ),
-    optics1: SIMD4(Float(optics.halfWidth), Float(optics.pupilRadius), 0, 0)
+    optics1: SIMD4(Float(optics.eyeDistance), Float(optics.travel), 0, 0)
 )
 
 let pyramid = MPSImageGaussianPyramid(device: device, centerWeight: 0.375)
@@ -389,10 +385,10 @@ let result: [String: Any] = [
     "pyramid_levels": levels,
     "optics": [
         "millimetres_per_point": millimetresPerPoint ?? 0,
-        "eye_distance_mm": DepthOptics.eyeDistanceMillimetres,
+        "eye_distance_mm": DepthOptics.defaultEyeDistanceMillimetres,
         "eye_distance_in_screen_heights": ratio,
-        "pupil_mm": DepthOptics.pupilMillimetres,
-        "pupil_radius_points": optics.pupilRadius,
+        "blur_radius_points": optics.blurRadius,
+        "brightness": optics.brightness,
         "separation_degrees": solvedFrame.separation * 180 / .pi,
     ],
     "frames": options.frames,

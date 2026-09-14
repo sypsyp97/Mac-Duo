@@ -1,221 +1,185 @@
 import CoreGraphics
-import DepthKit
-import Metal
-import simd
+import Foundation
 import Testing
+import simd
+@testable import DepthKit
 
+/// The picture is frozen in the room and the eye does not move, so the eye
+/// must see exactly the same rectangle at every lid angle. These build the
+/// scene from scratch in world coordinates and ray-trace it, sharing nothing
+/// with the code under test but the inputs, then compare through a pinhole
+/// camera at the eye. A sign convention shared by both sides would cancel in
+/// that comparison, which is the point: an earlier version of this geometry
+/// was self-consistent and wrong.
 struct DepthPhysicsTests {
-    private let size = CGSize(width: 1512, height: 982)
-    private let ratio = 2.81
 
-    // Independent world coordinates: forward along the desk, then up.
-    private func axes(_ angle: Double) -> (along: SIMD3<Double>, normal: SIMD3<Double>) {
-        let radians = angle * .pi / 180
-        return (SIMD3(0, cos(radians), sin(radians)), SIMD3(0, sin(radians), -cos(radians)))
+    static let width = 1512.0
+    static let height = 982.0
+    static let ratio = 2.81
+    static let start = 110.0
+    static var size: CGSize { CGSize(width: width, height: height) }
+
+    /// The screen's "up" direction in world axes, for a lid at `degrees`.
+    static func up(_ degrees: Double) -> SIMD3<Double> {
+        let t = degrees * .pi / 180
+        return SIMD3(0, cos(t), sin(t))
     }
 
-    private func eye(start: Double, size: CGSize, ratio: Double) -> SIMD3<Double> {
-        axes(start).along * (size.height / 2) + SIMD3(size.width / 2, size.height * ratio, 0)
+    /// A point of the glass, in world coordinates.
+    static func glass(_ degrees: Double, _ x: Double, _ y: Double) -> SIMD3<Double> {
+        SIMD3(x - width / 2, 0, 0) + up(degrees) * y
     }
 
-    private func optics(start: Double, current: Double, size: CGSize, ratio: Double) -> DepthOptics {
-        DepthOptics(frame: DepthGeometry().frame(startAngle: start, currentAngle: current,
-                    viewingDistanceRatio: ratio, screenSize: size),
-                    millimetresPerPoint: nil, screenSize: size)
+    /// The eye: on the normal through the screen centre at the start angle.
+    static var eye: SIMD3<Double> {
+        let centre = glass(start, width / 2, height / 2)
+        let u = up(start)
+        let normal = SIMD3(0.0, u.z, -u.y)      // toward the viewer
+        return centre + normal * (ratio * height)
     }
 
-    @Test func fixedWorldPictureProjectsOntoMovingGlass() {
-        for start in [40.0, 70, 90, 110, 130] {
-            let e = eye(start: start, size: size, ratio: ratio)
-            for current in stride(from: start + 2, through: 15, by: -2) {
-                let glass = axes(current)
-                let frame = optics(start: start, current: current, size: size, ratio: ratio)
-                #expect(abs(frame.pictureDistance - simd_dot(e, axes(start).normal)) < 1e-9)
-                let actual = DepthGeometry().corners(startAngle: start, currentAngle: current,
-                                viewingDistanceRatio: ratio, screenSize: size)
-                let points: [SIMD2<Double>] = [SIMD2(0, 0), SIMD2(Double(size.width), 0),
-                    SIMD2(Double(size.width), Double(size.height)), SIMD2(0, Double(size.height))]
-                for (i, uv) in points.enumerated() {
-                    let p = SIMD3(uv.x, 0, 0) + axes(start).along * uv.y
-                    let direction = p - e
-                    let t = -simd_dot(e, glass.normal) / simd_dot(direction, glass.normal)
-                    let g = e + t * direction
-                    #expect(abs(actual[i].x - g.x) < 1e-8)
-                    #expect(abs(actual[i].y - simd_dot(g, glass.along)) < 1e-8)
-                    let back = frame.screenToPicture * SIMD3(g.x, simd_dot(g, glass.along), 1)
-                    #expect(simd_length(SIMD2(back.x, back.y) / back.z - uv) < 1e-7)
-                }
+    /// Pinhole image of a world point, looking at the screen centre.
+    static func seen(_ p: SIMD3<Double>) -> SIMD2<Double>? {
+        let centre = glass(start, width / 2, height / 2)
+        let focal = ratio * height
+        let forward = (centre - eye) / focal
+        let upAxis = up(start)
+        let right = SIMD3(1.0, 0.0, 0.0)
+        let v = p - eye
+        let z = simd_dot(v, forward)
+        guard z > 1e-9 else { return nil }
+        return SIMD2(focal * simd_dot(v, right) / z, focal * simd_dot(v, upAxis) / z)
+    }
+
+    static func optics(at current: Double) -> DepthOptics {
+        let solved = DepthGeometry().frame(
+            startAngle: Self.start,
+            currentAngle: current,
+            viewingDistanceRatio: Self.ratio,
+            screenSize: Self.size
+        )
+        return DepthOptics(frame: solved, startAngle: Self.start, screenSize: Self.size)
+    }
+
+    /// What the shader will read for a glass point.
+    static func picture(_ optics: DepthOptics, _ x: Double, _ y: Double) -> SIMD2<Double> {
+        let h = optics.screenToPicture * SIMD3(x, y, 1)
+        return SIMD2(h.x / h.z, h.y / h.z)
+    }
+
+    @Test func aFrozenPictureLooksIdenticalFromEveryLidAngle() {
+        for current in stride(from: Self.start, through: 30.0, by: -5.0) {
+            let optics = Self.optics(at: current)
+            for (x, y) in [(0.0, 0.0), (Self.width, 0.0), (0.0, Self.height),
+                           (Self.width, Self.height), (Self.width / 2, Self.height / 2)] {
+                // What the shader puts at this glass point...
+                let source = Self.picture(optics, x, y)
+                // ...is a point of the picture, which lives at the start angle.
+                let world = Self.glass(Self.start, source.x, source.y)
+                guard let target = Self.seen(world),
+                      let actual = Self.seen(Self.glass(current, x, y)) else { continue }
+                let error = simd_distance(target, actual)
+                #expect(
+                    error < 0.01,
+                    "lid \(current)°, glass (\(x), \(y)): the eye sees a \(error) pt shift"
+                )
             }
         }
     }
 
-    @Test func closingLeavesPictureBehindGlass() {
-        let start = 110.0, current = 80.0
-        let p = axes(start).along * size.height
-        #expect(simd_dot(p, axes(current).normal) < 0)
-        let corners = DepthGeometry().corners(startAngle: start, currentAngle: current,
-                            viewingDistanceRatio: ratio, screenSize: size)
-        #expect(corners[2].x - corners[3].x < size.width)
+    @Test func theMappingIsTheIdentityBeforeTheLidMoves() {
+        let optics = Self.optics(at: Self.start)
+        for (x, y) in [(0.0, 0.0), (Self.width, Self.height), (Self.width / 2, 321.0)] {
+            let source = Self.picture(optics, x, y)
+            #expect(abs(source.x - x) < 1e-6 && abs(source.y - y) < 1e-6)
+        }
     }
 
-    @Test func inverseSurvivesGlassCrossingEyePlane() {
-        let e = eye(start: 110, size: size, ratio: ratio)
-        let grazing = atan2(e.z, e.y) * 180 / .pi
-        for current in [grazing - 0.001, grazing, grazing + 0.001] {
-            let o = optics(start: 110, current: current, size: size, ratio: ratio)
-            for i in 0..<3 {
-                for j in 0..<3 { #expect(o.screenToPicture[i][j].isFinite) }
+    /// The denominator that a naive picture-to-glass projection divides by can
+    /// reach zero; this direction cannot, which is why the shader uses it.
+    @Test func theMappingNeverDegenerates() {
+        for current in stride(from: Self.start, through: 0.0, by: -1.0) {
+            let optics = Self.optics(at: current)
+            for y in stride(from: 0.0, through: Self.height, by: Self.height / 8) {
+                let h = optics.screenToPicture * SIMD3(Self.width / 2, y, 1)
+                #expect(abs(h.z) > 1e-6, "lid \(current)°, y \(y): the divide collapsed")
             }
         }
-        #expect(optics(start: 110, current: grazing - 0.001, size: size, ratio: ratio).depth < 0)
-        #expect(optics(start: 110, current: grazing + 0.001, size: size, ratio: ratio).depth > 0)
     }
 
-    @Test(.enabled(if: MTLCreateSystemDefaultDevice() != nil, "Requires a Metal device"))
-    func gpuPreservesFirstFrameAndRadiance() throws {
-        let device = try #require(MTLCreateSystemDefaultDevice())
-        let queue = try #require(device.makeCommandQueue())
-        let library = try device.makeLibrary(source: DepthShaders.source, options: nil)
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = library.makeFunction(name: "depthVertex")
-        descriptor.fragmentFunction = library.makeFunction(name: "depthFragment")
-        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
-        let pipeline = try device.makeRenderPipelineState(descriptor: descriptor)
-        let width = 192, height = 128, padding = 32
-        let testSize = CGSize(width: width / 2, height: height / 2)
-        let tw = width + padding * 2, th = height + padding * 2
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm_srgb, width: tw, height: th, mipmapped: false)
-        textureDescriptor.storageMode = .shared
-        textureDescriptor.usage = .shaderRead
-        let texture = try #require(device.makeTexture(descriptor: textureDescriptor))
-        let targetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm_srgb, width: width, height: height, mipmapped: false)
-        targetDescriptor.storageMode = .shared
-        targetDescriptor.usage = .renderTarget
-        let target = try #require(device.makeTexture(descriptor: targetDescriptor))
+    /// Round trip through a brute-force intersection, which shares no algebra
+    /// with the matrix: send a picture point to the glass by hand, push that
+    /// glass point back through `screenToPicture`, and it must come home. This
+    /// catches a mistranscribed matrix entry, which the camera test above
+    /// could in principle absorb.
+    @Test func theMatrixInvertsAHandComputedIntersection() {
+        for current in stride(from: Self.start, through: 50.0, by: -10.0) {
+            let optics = Self.optics(at: current)
+            for (u, v) in [(0.0, 0.0), (Self.width, Self.height),
+                           (Self.width / 3, Self.height / 4), (Self.width, Self.height / 2)] {
+                // Ray from the eye to the picture point, meeting the glass.
+                let target = Self.glass(Self.start, u, v)
+                let normal = SIMD3(0.0, Self.up(current).z, -Self.up(current).y)
+                let toEye = simd_dot(Self.eye, normal)
+                let toTarget = simd_dot(target, normal)
+                guard abs(toEye - toTarget) > 1e-9 else { continue }
+                let step = toEye / (toEye - toTarget)
+                let hit = Self.eye + (target - Self.eye) * step
+                let onGlass = SIMD2(hit.x + Self.width / 2, simd_dot(hit, Self.up(current)))
 
-        func upload(pattern: Bool, gradient: Bool = false) -> [UInt8] {
-            var bytes = [UInt8](repeating: 0, count: tw * th * 4)
-            for y in 0..<th {
-                for x in 0..<tw {
-                    let i = (y * tw + x) * 4
-                    bytes[i + 3] = 255
-                    if x >= padding && x < padding + width && y >= padding && y < padding + height {
-                        for c in 0..<3 {
-                            bytes[i + c] = pattern ? UInt8((x * 13 + y * 7 + c * 37) % 256) : 180
-                            if gradient {
-                                let coordinate = c == 0 ? Double(x - padding) / Double(width)
-                                    : Double(y - padding) / Double(height)
-                                bytes[i + c] = UInt8(80 + 100 * coordinate)
-                            }
-                        }
-                    }
-                }
+                let home = Self.picture(optics, onGlass.x, onGlass.y)
+                #expect(
+                    simd_distance(home, SIMD2(u, v)) < 0.01,
+                    "lid \(current)°, picture (\(u), \(v)) came back at \(home)"
+                )
             }
-            texture.replace(region: MTLRegionMake2D(0, 0, tw, th), mipmapLevel: 0,
-                            withBytes: bytes, bytesPerRow: tw * 4)
-            return bytes
         }
+    }
 
-        func render(start: Double, current: Double, ratio: Double) throws -> [UInt8] {
-            let o = optics(start: start, current: current, size: testSize, ratio: ratio)
-            let matrix = o.screenToPicture
-            var uniforms = (0..<3).map { i -> SIMD4<Float> in
-                let c = matrix[i]
-                return SIMD4(Float(c.x), Float(c.y), Float(c.z), 0)
-            }
-            uniforms += [SIMD4(Float(testSize.width), Float(testSize.height), -16, -16),
-                         SIMD4(Float(tw) / 2, Float(th) / 2, 2, 0),
-                         SIMD4(Float(o.sinSeparation), Float(o.cosSeparation), Float(o.along), Float(o.depth)),
-                         SIMD4(Float(o.halfWidth), Float(o.pupilRadius), 0, 0)]
-            let command = try #require(queue.makeCommandBuffer())
-            let pass = MTLRenderPassDescriptor()
-            pass.colorAttachments[0].texture = target
-            pass.colorAttachments[0].loadAction = .clear
-            pass.colorAttachments[0].storeAction = .store
-            let encoder = try #require(command.makeRenderCommandEncoder(descriptor: pass))
-            encoder.setRenderPipelineState(pipeline)
-            uniforms.withUnsafeBytes {
-                encoder.setFragmentBytes($0.baseAddress!, length: $0.count, index: 0)
-            }
-            encoder.setFragmentTexture(texture, index: 0)
-            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
-            encoder.endEncoding()
-            command.commit()
-            command.waitUntilCompleted()
-            #expect(command.status == .completed)
-            var bytes = [UInt8](repeating: 0, count: width * height * 4)
-            target.getBytes(&bytes, bytesPerRow: width * 4,
-                            from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
-            return bytes
+    /// The reference effect crops the picture against the screen edge as the
+    /// lid closes. `screenToPicture` runs glass to picture, so that shows up
+    /// as the screen covering an ever wider slice of the picture: the picture
+    /// itself is shrinking on the glass and falling inside the bezel.
+    @Test func theScreenCoversMoreOfThePictureAsTheLidCloses() {
+        var previous = 0.0
+        for current in stride(from: Self.start, through: 50.0, by: -10.0) {
+            let optics = Self.optics(at: current)
+            let covered = Self.picture(optics, Self.width, Self.height).x
+                - Self.picture(optics, 0, Self.height).x
+            #expect(
+                covered >= previous - 1e-9,
+                "at \(current)° the screen suddenly covered less of the picture"
+            )
+            previous = covered
         }
+        // Starts as an exact fit, then really does widen rather than crawl.
+        let open = Self.optics(at: Self.start)
+        let openSpan = Self.picture(open, Self.width, Self.height).x
+            - Self.picture(open, 0, Self.height).x
+        #expect(abs(openSpan - Self.width) < 1e-6)
+        #expect(previous > Self.width * 1.3, "the picture barely changed size")
+    }
 
-        let source = upload(pattern: true)
-        for start in [40.0, 90, 110, 130] {
-            let result = try render(start: start, current: start, ratio: ratio)
-            var maximumError = 0
-            for y in 0..<height {
-                for x in 0..<width {
-                    for c in 0..<4 {
-                        maximumError = max(maximumError, abs(Int(result[(y * width + x) * 4 + c])
-                            - Int(source[((y + padding) * tw + x + padding) * 4 + c])))
-                    }
-                }
-            }
-            #expect(maximumError <= 1)
+    @Test func theLookRunsFromUntouchedToShut() {
+        let open = Self.optics(at: Self.start)
+        #expect(open.travel == 0)
+        #expect(open.blurRadius == 0)
+        #expect(open.brightness == 1)
+
+        let shut = Self.optics(at: 0)
+        #expect(abs(shut.travel - 1) < 1e-9)
+        #expect(abs(shut.blurRadius - DepthOptics.maximumBlurPoints) < 1e-9)
+        #expect(shut.brightness == 0)
+
+        // Monotone in between, which is what keeps the ramp from reversing.
+        var previousBlur = -1.0
+        var previousBrightness = 2.0
+        for current in stride(from: Self.start, through: 0.0, by: -5.0) {
+            let o = Self.optics(at: current)
+            #expect(o.blurRadius >= previousBlur)
+            #expect(o.brightness <= previousBrightness)
+            previousBlur = o.blurRadius
+            previousBrightness = o.brightness
         }
-        _ = upload(pattern: false)
-        for current in [110.0, 90, 80, 60, 30, 5] {
-            let result = try render(start: 110, current: current, ratio: ratio)
-            let e = eye(start: 110, size: testSize, ratio: ratio)
-            let glass = axes(current), picture = axes(110)
-            if simd_dot(e, glass.normal) <= 0 {
-                #expect(stride(from: 0, to: result.count, by: 4).allSatisfy { result[$0] == 0 })
-                continue
-            }
-            var checked = 0
-            for y in stride(from: 8, to: height - 8, by: 8) {
-                for x in stride(from: 8, to: width - 8, by: 8) {
-                    let g = SIMD3((Double(x) + 0.5) / 2, 0, 0)
-                        + glass.along * (testSize.height - (Double(y) + 0.5) / 2)
-                    let direction = g - e
-                    let t = -simd_dot(e, picture.normal) / simd_dot(direction, picture.normal)
-                    let p = e + t * direction
-                    let py = simd_dot(p, picture.along)
-                    if t > 0 && p.x > 16 && p.x < testSize.width - 16
-                        && py > 16 && py < testSize.height - 16 {
-                        #expect(abs(Int(result[(y * width + x) * 4]) - 180) <= 1)
-                        checked += 1
-                    }
-                }
-            }
-            #expect(checked > 0)
-        }
-        _ = upload(pattern: false, gradient: true)
-        let gradient = try render(start: 110, current: 80, ratio: ratio)
-        let e = eye(start: 110, size: testSize, ratio: ratio)
-        let glass = axes(80), picture = axes(110)
-        var gradientChecks = 0
-        for y in stride(from: 16, to: height - 16, by: 8) {
-            for x in stride(from: 16, to: width - 16, by: 8) {
-                let g = SIMD3((Double(x) + 0.5) / 2, 0, 0)
-                    + glass.along * (testSize.height - (Double(y) + 0.5) / 2)
-                let ray = g - e
-                let t = -simd_dot(e, picture.normal) / simd_dot(ray, picture.normal)
-                let p = e + t * ray
-                let py = simd_dot(p, picture.along)
-                if p.x > 16 && p.x < testSize.width - 16 && py > 16 && py < testSize.height - 16 {
-                    let expectedX = 80 + 100 * (p.x * 2 - 0.5) / Double(width)
-                    let expectedY = 80 + 100 * ((testSize.height - py) * 2 - 0.5) / Double(height)
-                    #expect(abs(Double(gradient[(y * width + x) * 4]) - expectedX) < 2)
-                    #expect(abs(Double(gradient[(y * width + x) * 4 + 1]) - expectedY) < 2)
-                    gradientChecks += 1
-                }
-            }
-        }
-        #expect(gradientChecks > 0)
-        // A nearby eye also exercises rays parallel to, or behind, the picture.
-        _ = try render(start: 40, current: 30, ratio: 0.5)
     }
 }

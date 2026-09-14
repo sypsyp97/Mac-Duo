@@ -217,18 +217,21 @@ final class DepthOverlay {
     func update(currentAngle: Double, tuning: DepthTuning) {
         guard let renderer, renderer.isReady else { return }
         self.tuning = tuning
-        let ratio = tuning.viewingDistanceRatio(screenHeightPoints: Double(screenSize.height))
         let solved = geometry.frame(
             startAngle: startAngle,
             currentAngle: currentAngle,
-            viewingDistanceRatio: ratio,
+            viewingDistanceRatio: tuning.viewingDistanceRatio(
+                screenHeightPoints: Double(screenSize.height)
+            ),
             screenSize: screenSize
         )
         renderer.render(
             optics: DepthOptics(
                 frame: solved,
-                millimetresPerPoint: tuning.millimetresPerPoint,
-                screenSize: screenSize
+                startAngle: startAngle,
+                screenSize: screenSize,
+                strength: tuning.strength,
+                eyeHeightAboveCentre: tuning.eyeHeightPoints
             )
         )
     }

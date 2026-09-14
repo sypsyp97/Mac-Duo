@@ -470,9 +470,9 @@ final class DepthRenderer {
             ),
             optics0: SIMD4(
                 Float(optics.sinSeparation), Float(optics.cosSeparation),
-                Float(optics.along), Float(optics.depth)
+                Float(optics.blurRadius), Float(optics.brightness)
             ),
-            optics1: SIMD4(Float(optics.halfWidth), Float(optics.pupilRadius), 0, 0)
+            optics1: SIMD4(Float(optics.eyeDistance), Float(optics.travel), 0, 0)
         )
 
         let pass = MTLRenderPassDescriptor()
