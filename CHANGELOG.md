@@ -5,6 +5,54 @@ All notable changes to this fork. Kept in the style of
 
 ## [Unreleased]
 
+### Changed
+
+- **The projection was solved properly.** The picture is meant to stay where it was in the room
+  while the glass turns out from under it; instead it squashed downward, which reads as the image
+  being flattened rather than as the screen moving away from it. The cause was re-expressing the
+  eye in the rotating glass frame every angle, when its relation to the picture plane never
+  changes. The acceptance test is the invariant itself: a picture fixed in space, seen from a
+  fixed eye, must project to the same rectangle at every lid angle. The old mapping moved the top
+  edge 125 pt at 90 degrees and 476 pt at 50; the new one holds it to 0.
+- **Blur and dimming follow the lid angle, not a lens.** As optics they were vacuous — the picture
+  and the eye are both fixed, so nothing ever leaves the focal plane and a real lens would hold
+  focus the whole way. A 3.5 mm pupil gave 2.8 pt of blur at full travel against the 135 pt the
+  effect wants. They now follow how far the panel has turned, which is what the effect this
+  imitates does.
+- **The settings are down to one control for the look.** Strength, 0 to 200%, pushes the blur and
+  the dimming. Viewing distance and eye height feed the geometry and the camera can fill them in.
+  Everything else is solved.
+
+### Added
+
+- **The camera finds the viewpoint.** Assuming the viewer sits 550 mm away on the screen's centre
+  normal is wrong for most people, and visibly so: sitting at 700 while the app assumes 550 draws
+  the top edge 10% narrow at a 60 degree separation, which reads as leaning away too much. A face
+  gives the distance and the height, anchored by the one judgement a viewer can actually make —
+  whether the picture has stopped leaning. Nobody is asked for a measurement they cannot take.
+- The app is signed with `com.apple.security.device.camera`. Without it the hardened runtime
+  refuses camera access outright, with no prompt and an immediate denial recorded.
+
+### Fixed
+
+- The panel's body height was fixed at 400 pt, sized for nine sliders that no longer exist, so
+  most of it was empty. It sizes to its content.
+- Opening the app from Finder or the Dock did nothing: an accessory app has no window to raise
+  and nothing handled the reopen. It shows the panel.
+
+### Notes for anyone working on this
+
+- The camera's own metadata will mislead you. `OriginalCameraIntrinsicMatrix`,
+  `PinholeCameraFocalLength` and `FocalLenIn35mmFilm` all describe the whole 3040 px super-wide
+  sensor, while the delivered frame is a crop of it with a normal field of view. `SensorCropRect`,
+  `RawCropRect` and `TotalScalingFromPhysicalSensor` all report the full frame and none of them
+  says how much of it you got. Taking the full width puts the focal length out by 2.2x. That is
+  why one lumped constant is calibrated instead of two read out.
+- `DepthPhysicsTests` builds its scene from scratch in world coordinates and compares through a
+  pinhole camera at the eye, sharing nothing with the code under test but the inputs. That matters:
+  the geometry it replaced was self-consistent and wrong, and a test written in its own terms
+  agreed with it.
+
 ### Added
 
 - **Physical optics**, on by default. Defocus is a thin lens focused on the glass and the light

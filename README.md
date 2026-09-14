@@ -18,14 +18,16 @@ picture would actually be.
 
 ## What it does
 
-- **Physical optics.** Defocus is a thin lens focused on the glass, and the light is Lambert
-  against the turned panel with inverse-square falloff. Both are exactly neutral while the
-  picture still lies on the glass, so the effect grows out of the geometry rather than out of a
-  tuned curve.
+- **The picture holds still.** It stays where it was in the room while the glass turns out from
+  under it, so what you see is where the picture would actually be. The projection is solved from
+  the lid angle and the display's real size, and a test holds it to the invariant: a picture fixed
+  in space, seen from a fixed eye, must project to the same rectangle at every lid angle.
+- **The camera finds your viewpoint.** Where you sit changes what "held still" should look like.
+  Drag the slider until the picture stops leaning, let the camera remember that, and it follows
+  you afterwards. It never runs during the effect.
 - **Live screen content.** ScreenCaptureKit feeds the picture in real time.
-- **Metal rendering.** One full-screen pass per frame, 0.44 ms on an M5 Pro against an 8.3 ms
+- **Metal rendering.** One full-screen pass per frame, 0.49 ms on an M5 Pro against an 8.3 ms
   budget at 120 Hz.
-- **Adjustable viewpoint.** Move the eye position so the perspective matches where you sit.
 
 ## Requirements
 
@@ -69,16 +71,29 @@ Certificate, type *Code Signing*. Grant the permission once after that.
 |---|---|
 | Depth effect | Master switch. |
 | Live rendering | Off holds the frame from when the effect started. |
-| Physical optics | Focus and light from where the picture is. Off restores the fixed gradients. |
 | Timeout | Ends the effect once the angle stops changing. |
 | Start angle | Closing past this angle starts the effect. |
-| Blur | How wide the lens opens. |
-| Dimming | How much of the measured light loss to apply. |
-| Lean back | Degrees the picture leans per degree of closing. 1 holds it still in the room. |
-| Perspective | Where the eye sits, as a multiple of the screen height. |
+| Viewing distance | Where the geometry puts your eyes. Drag until the picture stops leaning. |
+| Eye height | How far above the middle of the screen they sit. |
+| Strength | How hard the blur and the dimming are pushed. 0 leaves the picture sharp and lit while it still moves correctly. |
 
-Three sliders that only shape the old gradients — *Full effect after*, *Blur spread*,
-*Dimming spread* — are hidden while Physical optics is on, because nothing reads them.
+Strength is the only one that is taste. The shape of the picture is solved either way.
+
+### Letting the camera do it
+
+*Remember where I sit* records what the camera sees at the setting you just tuned; *Follow me*
+moves the sliders to wherever you are now. You are never asked for a distance in centimetres,
+because you have no way to know one — the number on the slider is an output.
+
+The scale has to be calibrated rather than read out. This is a super-wide sensor, 3040 px across,
+and the video stream is a crop of it with a normal field of view; the intrinsic matrix,
+`PinholeCameraFocalLength` and `FocalLenIn35mmFilm` all describe the whole sensor, and nothing in
+the metadata says how much of it the delivered frame covers. Taking the full width, which is what
+those fields invite, puts the focal length out by 2.2x. One lumped constant — distance times pupil
+separation — absorbs the crop and your own pupil spacing together.
+
+Camera access needs `com.apple.security.device.camera` in the signature. Without it the hardened
+runtime refuses outright, with no prompt and an immediate denial recorded.
 
 ## Measurements
 
@@ -89,8 +104,8 @@ picture 3504×2444, 12 pyramid levels:
 | Stage | p50 |
 |---|---|
 | Copy the frame in and rebuild the pyramid | 0.330 ms |
-| Full screen shader pass | 0.114 ms |
-| **Per frame** | **0.442 ms** |
+| Full screen shader pass | 0.155 ms |
+| **Per frame** | **0.486 ms** |
 | Build one still picture, once per effect | 4.4 ms |
 
 Two optimisations were measured and dropped: trimming the 120 pt black margin, worth at most
