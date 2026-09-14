@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: mac-duo-release
+  group: mac-duo-pro-release
   cancel-in-progress: false
   queue: max
 
@@ -22,7 +22,7 @@ jobs:
       run:
         shell: bash
     env:
-      APP_PATH: build/Mac Duo.app
+      APP_PATH: build/Mac Duo Pro.app
       DIST_PATH: build/release
 
     steps:
@@ -55,9 +55,9 @@ jobs:
             echo "version=$VERSION"
             echo "build=$BUILD_VERSION"
             echo "label=$LABEL"
-            echo "title=Mac Duo $LABEL"
-            echo "dmg=Mac-Duo-dev.dmg"
-            echo "zip=Mac-Duo-dev.zip"
+            echo "title=Mac Duo Pro $LABEL"
+            echo "dmg=Mac-Duo-Pro-dev.dmg"
+            echo "zip=Mac-Duo-Pro-dev.zip"
           } >> "$GITHUB_OUTPUT"
 
       - name: Validate signing secrets
@@ -147,10 +147,10 @@ jobs:
           mkdir -p "$DIST_PATH"
           STAGING="$(mktemp -d "$RUNNER_TEMP/dmg-staging.XXXXXX")"
           trap 'rm -rf "$STAGING"' EXIT
-          ditto "$APP_PATH" "$STAGING/Mac Duo.app"
+          ditto "$APP_PATH" "$STAGING/Mac Duo Pro.app"
           ln -s /Applications "$STAGING/Applications"
           DMG_PATH="$DIST_PATH/$DMG_NAME"
-          hdiutil create -volname 'Mac Duo' -srcfolder "$STAGING" \
+          hdiutil create -volname 'Mac Duo Pro' -srcfolder "$STAGING" \
             -fs HFS+ -format UDZO "$DMG_PATH"
           codesign --force --sign "$SIGNING_IDENTITY" --keychain "$KEYCHAIN_PATH" --timestamp "$DMG_PATH"
           codesign --verify --strict "$DMG_PATH"
@@ -221,7 +221,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Mac-Duo-${{ steps.meta.outputs.label }}
+          name: Mac-Duo-Pro-${{ steps.meta.outputs.label }}
           path: |
             build/release/*.dmg
             build/release/*.zip
@@ -233,9 +233,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            printf '**Mac Duo %s**\n\n' "$BUILD_LABEL"
+            printf '**Mac Duo Pro %s**\n\n' "$BUILD_LABEL"
             printf 'Commit: `%s`\n\n' "$GITHUB_SHA"
-            printf 'Open the DMG and drag **Mac Duo** to **Applications**, or extract the ZIP.\n\n'
+            printf 'Open the DMG and drag **Mac Duo Pro** to **Applications**, or extract the ZIP.\n\n'
             printf 'Requires macOS 14 or later and a MacBook with a compatible lid angle sensor.\n'
             printf 'Includes Apple Silicon and Intel binaries.\n\n'
             printf 'Grant Screen Recording permission when prompted to enable the effect.\n'

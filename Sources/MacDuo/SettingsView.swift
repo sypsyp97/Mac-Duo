@@ -84,7 +84,7 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Mac Duo").font(.title2.weight(.semibold))
+            Text("Mac Duo Pro").font(.title2.weight(.semibold))
             Spacer()
             Text(String(format: "%.1f°", controller.currentAngle))
                 .font(.system(.title3, design: .rounded).monospacedDigit())
@@ -176,7 +176,7 @@ struct SettingsView: View {
                 localized("Launch at login"),
                 isOn: $launchesAtLogin,
                 help: needsLoginApproval
-                    ? localized("Allow Mac Duo under Login Items & Extensions to finish turning this on.")
+                    ? localized("Allow Mac Duo Pro under Login Items & Extensions to finish turning this on.")
                     : nil
             )
             .onChange(of: launchesAtLogin) { _, newValue in
@@ -240,7 +240,7 @@ struct SettingsView: View {
                 .controlSize(.small)
             }
             if settingsOpenFailed {
-                Text(localized("Could not open System Settings. Open it manually and enable screen recording for Mac Duo under Privacy & Security."))
+                Text(localized("Could not open System Settings. Open it manually and enable screen recording for Mac Duo Pro under Privacy & Security."))
                     .font(.caption)
                     .fixedSize(horizontal: false, vertical: true)
             }

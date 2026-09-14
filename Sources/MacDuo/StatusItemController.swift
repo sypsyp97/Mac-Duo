@@ -21,7 +21,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if let button = statusItem.button {
             button.image = NSImage(
                 systemSymbolName: "laptopcomputer",
-                accessibilityDescription: "Mac Duo"
+                accessibilityDescription: "Mac Duo Pro"
             )
             button.imagePosition = .imageLeading
             button.target = self

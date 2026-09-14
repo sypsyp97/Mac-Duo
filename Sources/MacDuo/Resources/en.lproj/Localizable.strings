@@ -32,11 +32,11 @@
 "Made by " = "Made by ";
 "Screen Recording permission is required to show the depth effect." = "Screen Recording permission is required to show the depth effect.";
 "Open System Settings" = "Open System Settings";
-"Could not open System Settings. Open it manually and enable screen recording for Mac Duo under Privacy & Security." = "Could not open System Settings. Open it manually and enable screen recording for Mac Duo under Privacy & Security.";
+"Could not open System Settings. Open it manually and enable screen recording for Mac Duo Pro under Privacy & Security." = "Could not open System Settings. Open it manually and enable screen recording for Mac Duo Pro under Privacy & Security.";
 "Language" = "Language";
 "System" = "System";
 "Chinese (Simplified)" = "Chinese (Simplified)";
-"Allow Mac Duo under Login Items & Extensions to finish turning this on." = "Allow Mac Duo under Login Items & Extensions to finish turning this on.";
+"Allow Mac Duo Pro under Login Items & Extensions to finish turning this on." = "Allow Mac Duo Pro under Login Items & Extensions to finish turning this on.";
 "Physical optics" = "Physical optics";
 "Takes the focus and the light from where the picture is, instead of a fixed gradient." = "Takes the focus and the light from where the picture is, instead of a fixed gradient.";
 "How wide the lens opens. Larger throws the picture further out of focus." = "How wide the lens opens. Larger throws the picture further out of focus.";

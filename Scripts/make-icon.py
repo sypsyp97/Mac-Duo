@@ -2,7 +2,7 @@
 """Draws Resources/AppIcon.icns.
 
 The mark is the effect itself: a MacBook seen from the front, its picture
-lifted off the glass and leaning back, blurred and dimmed the way Mac Duo
+lifted off the glass and leaning back, blurred and dimmed the way Mac Duo Pro
 draws it while the lid closes.
 
     ~/.manim-svg-venv/bin/python Scripts/make-icon.py

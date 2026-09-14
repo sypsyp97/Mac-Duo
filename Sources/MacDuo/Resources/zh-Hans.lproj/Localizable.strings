@@ -32,11 +32,11 @@
 "Made by " = "作者：";
 "Screen Recording permission is required to show the depth effect." = "需要屏幕录制权限才能显示景深效果。";
 "Open System Settings" = "打开系统设置";
-"Could not open System Settings. Open it manually and enable screen recording for Mac Duo under Privacy & Security." = "无法打开系统设置。请手动打开，在“隐私与安全性”中为 Mac Duo 开启屏幕录制权限。";
+"Could not open System Settings. Open it manually and enable screen recording for Mac Duo Pro under Privacy & Security." = "无法打开系统设置。请手动打开，在“隐私与安全性”中为 Mac Duo Pro 开启屏幕录制权限。";
 "Language" = "语言";
 "System" = "跟随系统";
 "Chinese (Simplified)" = "简体中文";
-"Allow Mac Duo under Login Items & Extensions to finish turning this on." = "还需在「登录项与扩展」中允许 Mac Duo，此开关才真正生效。";
+"Allow Mac Duo Pro under Login Items & Extensions to finish turning this on." = "还需在「登录项与扩展」中允许 Mac Duo Pro，此开关才真正生效。";
 "Physical optics" = "物理光学";
 "Takes the focus and the light from where the picture is, instead of a fixed gradient." = "按画面的实际位置计算对焦与受光，而不是套一条固定渐变。";
 "How wide the lens opens. Larger throws the picture further out of focus." = "光圈开多大。越大，画面离焦越明显。";

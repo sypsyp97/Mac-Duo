@@ -11,9 +11,9 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Mac Duo</string>
+	<string>Mac Duo Pro</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mac Duo</string>
+	<string>Mac Duo Pro</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -29,7 +29,7 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Mac Duo looks once through the camera to measure how far away you are sitting, so the depth effect is drawn for your actual viewpoint. Nothing is recorded or sent anywhere.</string>
+	<string>Mac Duo Pro looks once through the camera to measure how far away you are sitting, so the depth effect is drawn for your actual viewpoint. Nothing is recorded or sent anywhere.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

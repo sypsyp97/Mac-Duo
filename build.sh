@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Builds Mac Duo.app from the SwiftPM package.
+# Builds Mac Duo Pro.app from the SwiftPM package.
 #
 #   ./build.sh            build and sign
 #   ./build.sh --run      build, sign, and relaunch the app
@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
-APP_NAME="Mac Duo"
+APP_NAME="Mac Duo Pro"
 BUNDLE="build/${APP_NAME}.app"
 
 BUILD_ARGS=(-c release)
@@ -59,7 +59,7 @@ codesign -dv "$BUNDLE" 2>&1 | grep -E "Identifier|TeamIdentifier|Signature" || t
 
 if "$RUN_APP"; then
   # Only this checkout's build. `pkill -x MacDuo` matches on the process name
-  # alone, so it also kills a Mac Duo the user installed in /Applications.
+  # alone, so it also kills a Mac Duo Pro the user installed in /Applications.
   pkill -fx "$PWD/$BUNDLE/Contents/MacOS/MacDuo" 2>/dev/null || true
   sleep 0.5
   open "$BUNDLE"

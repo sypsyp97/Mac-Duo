@@ -1,6 +1,6 @@
 <div align="center">
 
-# Mac Duo
+# Mac Duo Pro
 
 **The iPhone Duo effect, on a MacBook.**
 
@@ -42,7 +42,7 @@ Xcode with Swift 6.0 or later:
 ./build.sh --universal
 ```
 
-The app lands in `build/Mac Duo.app`.
+The app lands in `build/Mac Duo Pro.app`.
 
 ### Signing, and why it matters here
 
@@ -56,7 +56,7 @@ certificate, which survives rebuilds:
 
 ```sh
 SIGN_IDENTITY="My Local Signing" ./build.sh --universal
-codesign -d -r- "build/Mac Duo.app"
+codesign -d -r- "build/Mac Duo Pro.app"
 # designated => identifier "com.sypsyp97.MacDuo" and certificate root = H"..."
 ```
 
