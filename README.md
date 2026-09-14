@@ -2,12 +2,11 @@
 
 # Mac Duo
 
-**Wish you could bring the iPhone Duo effect to your MacBook?**
+**The iPhone Duo effect, on a MacBook.**
 
-https://github.com/user-attachments/assets/3ea3b098-c6d2-4398-8f3a-e9087bbb33f2
-
-Close the lid and watch your screen content tilt, blur, and fade as it moves.  
-Mac Duo adds this effect to your MacBook, with controls in the menu bar.
+Close the lid and the screen tilts, blurs and fades as it goes. The picture is lifted off the
+glass and left standing in the room while the panel turns under it, so what you see is where the
+picture would actually be.
 
 **Available in:** English and Simplified Chinese (简体中文).
 
@@ -17,34 +16,40 @@ Mac Duo adds this effect to your MacBook, with controls in the menu bar.
 
 <hr>
 
-## About this fork
+## What it does
 
-A fork of [sumimakito/Mac-Duo](https://github.com/sumimakito/Mac-Duo) carrying fixes for
-reported issues, plus a benchmark for the effect's GPU cost. Upstream is the original; this
-tracks it and adds:
+- **Physical optics.** Defocus is a thin lens focused on the glass, and the light is Lambert
+  against the turned panel with inverse-square falloff. Both are exactly neutral while the
+  picture still lies on the glass, so the effect grows out of the geometry rather than out of a
+  tuned curve.
+- **Live screen content.** ScreenCaptureKit feeds the picture in real time.
+- **Metal rendering.** One full-screen pass per frame, 0.44 ms on an M5 Pro against an 8.3 ms
+  budget at 120 Hz.
+- **Adjustable viewpoint.** Move the eye position so the perspective matches where you sit.
 
-| Change | Upstream issue |
-|---|---|
-| Simplified Chinese resolves in released builds, not only in local ones | [#21](https://github.com/sumimakito/Mac-Duo/issues/21), [#23](https://github.com/sumimakito/Mac-Duo/issues/23) |
-| Blit mipmaps stand in when the MPS Gaussian pyramid refuses to encode | [#5](https://github.com/sumimakito/Mac-Duo/issues/5), [#10](https://github.com/sumimakito/Mac-Duo/issues/10) |
-| `build.sh --run` no longer terminates an installed copy of the app | [#24](https://github.com/sumimakito/Mac-Duo/issues/24) |
-| An application icon, drawn by a script that can regenerate it | [#20](https://github.com/sumimakito/Mac-Duo/issues/20) |
-| `depthbench`, a probe for the effect's per-frame GPU cost | — |
+## Requirements
 
-### The Chinese localization
+macOS 14 or later, and a MacBook with a lid angle sensor. The app says so when there is none.
+Screen Recording permission is required; the app asks on first launch.
 
-SwiftPM writes the localization as `zh-hans.lproj` for a plain `swift build` and `zh-Hans.lproj`
-for a universal one. `Bundle` matches resource names case-sensitively even on a case-insensitive
-filesystem, so a lookup under a fixed casing found the directory in a development build and
-nothing in the shipped app, which then fell back to English. The fix takes the spelling from
-`Bundle.localizations`. That split is also why the fault appears only in downloaded builds.
+## Build
 
-### Screen Recording permission while developing
+Xcode with Swift 6.0 or later:
 
-`build.sh` signs ad-hoc by default, and an ad-hoc signature has no stable identity: the
-designated requirement is the code hash, so **every rebuild invalidates the Screen Recording
-grant**. The entry left behind still reads as enabled in System Settings while capture keeps
-failing with `-3801`, which makes it look like a permission bug rather than a signing one.
+```sh
+./build.sh          # build and sign
+./build.sh --run    # build, sign, and relaunch
+./build.sh --universal
+```
+
+The app lands in `build/Mac Duo.app`.
+
+### Signing, and why it matters here
+
+`build.sh` signs ad-hoc by default. An ad-hoc signature has no stable identity — the designated
+requirement is the code hash — so **every rebuild invalidates the Screen Recording grant**. The
+entry left behind still reads as enabled in System Settings while capture keeps failing with
+`-3801`, which looks like a permission bug and is not one.
 
 Sign with any code-signing identity and the requirement becomes the bundle id plus the
 certificate, which survives rebuilds:
@@ -55,81 +60,64 @@ codesign -d -r- "build/Mac Duo.app"
 # designated => identifier "to.maki.MacDuo" and certificate root = H"..."
 ```
 
-A self-signed certificate is enough. Create one in Keychain Access (Certificate Assistant →
-Create a Certificate, type *Code Signing*), then grant the permission once.
+A self-signed certificate is enough: Keychain Access → Certificate Assistant → Create a
+Certificate, type *Code Signing*. Grant the permission once after that.
 
-### Measurements
+## Settings
+
+| Setting | What it does |
+|---|---|
+| Depth effect | Master switch. |
+| Live rendering | Off holds the frame from when the effect started. |
+| Physical optics | Focus and light from where the picture is. Off restores the fixed gradients. |
+| Timeout | Ends the effect once the angle stops changing. |
+| Start angle | Closing past this angle starts the effect. |
+| Blur | How wide the lens opens. |
+| Dimming | How much of the measured light loss to apply. |
+| Lean back | Degrees the picture leans per degree of closing. 1 holds it still in the room. |
+| Perspective | Where the eye sits, as a multiple of the screen height. |
+
+Three sliders that only shape the old gradients — *Full effect after*, *Blur spread*,
+*Dimming spread* — are hidden while Physical optics is on, because nothing reads them.
+
+## Measurements
 
 `swift build -c release --product depthbench && .build/release/depthbench` runs the live path's
 own work off screen at the built-in display's real size. On an M5 Pro at 3024×1964, padded
-picture 3504×2444, 12 pyramid levels, 300 frames:
+picture 3504×2444, 12 pyramid levels:
 
-| Stage | p50 | p95 |
-|---|---|---|
-| Copy the frame in and rebuild the pyramid | 0.330 ms | 0.335 ms |
-| Full screen shader pass | 0.078 ms | 0.078 ms |
-| **Per frame** | **0.408 ms** | **0.413 ms** |
-| Build one still picture (once per effect) | 4.4 ms | — |
+| Stage | p50 |
+|---|---|
+| Copy the frame in and rebuild the pyramid | 0.330 ms |
+| Full screen shader pass | 0.114 ms |
+| **Per frame** | **0.442 ms** |
+| Build one still picture, once per effect | 4.4 ms |
 
-The frame budget at 120 Hz is 8.3 ms, so the whole GPU path costs about 5% of it. Two
-optimisations were measured and dropped as a result: trimming the 120 pt black margin, worth at
-most 0.2 ms of that 0.41 ms, and filling only the margin instead of the whole buffer before
-drawing the screenshot, whose measured effect changed sign across repeated runs. On Apple
-Silicon this effect is not compute-bound.
-
-<hr>
-
-With the default settings, it's recommended to view the effect in front of your MacBook.
-
-- **Metal rendering:** Uses GPU rendering to apply perspective, blur, and dimming as the lid closes.
-- **Live screen content:** Uses ScreenCaptureKit to capture and render screen content in real time.
-- **Adjustable perspective:** Tweak the perspective to suit your viewing position and make the effect look more natural.
-
-
-> [!NOTE]
-> Mac Duo is completely **free** to use. Whether you use the app or reuse its code in your projects, please consider [sponsoring me](https://github.com/sponsors/sumimakito) if you find it helpful.
->
-> Special thanks to our team at [Moeru AI](https://github.com/moeru-ai) for sponsoring the Apple Developer Program membership used to sign and notarize the prebuilt app here.
-
-## Download
-
-[Download DMG](https://github.com/sumimakito/Mac-Duo/releases/download/dev/Mac-Duo-dev.dmg) | [Download ZIP](https://github.com/sumimakito/Mac-Duo/releases/download/dev/Mac-Duo-dev.zip)
-
-These downloads contain the latest [development build](https://github.com/sumimakito/Mac-Duo/releases/tag/dev) for Apple Silicon and Intel Macs.
-
-Requires macOS 14 or later and a MacBook with a compatible lid angle sensor.
-Grant Screen Recording permission when prompted to enable the effect.
-
-## Build
-
-Requires Xcode with Swift 6.0 or later. Run from the project directory:
-
-```sh
-./build.sh
-```
-
-The script creates `build/Mac Duo.app` with an ad-hoc signature. Open it from Finder, or build and launch with:
-
-```sh
-./build.sh --run
-```
-
-macOS may require Screen Recording permission again after rebuilding with ad-hoc signing.
+Two optimisations were measured and dropped: trimming the 120 pt black margin, worth at most
+0.2 ms of that, and filling only the margin before drawing the screenshot, whose measured effect
+changed sign across repeated runs. On Apple Silicon this effect is not compute-bound; the
+capture stream takes 30–50 ms to start, a hundred times the whole GPU path.
 
 ## Known limitations
 
-- Only MacBooks with a compatible lid angle sensor can use the effect. The app reports when no sensor is available.
-- The sensor must be one macOS marks as built-in. An external display with a similar sensor is ignored.
-- The effect applies only to the built-in display.
-- The effect stops when macOS sleeps as the lid closes.
-- Clicks pass through the effect to the apps underneath.
+- Only MacBooks with a lid angle sensor can run the effect.
+- The sensor must be one macOS marks as built-in; an external display with a similar sensor is
+  ignored.
+- The effect applies to the built-in display only.
+- It stops when macOS sleeps as the lid closes, so the visible part is the first stretch of
+  travel.
+- Clicks pass straight through to the apps underneath.
 
-## Acknowledgements
+## Changes
 
-This project is built with AI assistance.
+See [CHANGELOG.md](CHANGELOG.md).
+
+## Credits
+
+Built on [sumimakito/Mac-Duo](https://github.com/sumimakito/Mac-Duo), Apache-2.0.
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Makito.
+Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Yipeng Sun.
 
 See [NOTICE](NOTICE) for attribution.
