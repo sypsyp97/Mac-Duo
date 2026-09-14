@@ -1,4 +1,5 @@
 import AppKit
+import DepthKit
 import Metal
 import MetalPerformanceShaders
 import QuartzCore
@@ -63,7 +64,11 @@ final class DepthRenderer {
     /// A held picture to start from, waiting for the same moment. A live
     /// frame that arrives first wins, since it is the newer of the two.
     private var pendingSeed: (buffer: MTLBuffer, width: Int, height: Int)?
-    private static var hasReportedPyramidFailure = false
+    // Log-once flags for the pyramid fallback. `makePicture` runs off the main
+    // actor, so these cannot be isolated to it; a lost race only repeats a
+    // diagnostic line.
+    nonisolated(unsafe) private static var hasReportedPyramidFailure = false
+    nonisolated(unsafe) private static var hasReportedPyramidFallback = false
     /// Built once, re-encoded every frame.
     private lazy var livePyramid = MPSImageGaussianPyramid(device: device, centerWeight: 0.375)
 
@@ -113,6 +118,47 @@ final class DepthRenderer {
         // link already paces the drawing.
         target.displaySyncEnabled = false
         target.needsDisplayOnBoundsChange = true
+    }
+
+    /// Builds the mip chain under a picture, in place.
+    ///
+    /// `MPSImageGaussianPyramid` is the intended path, but its encode returns
+    /// false on some GPUs and leaves every level above 0 uninitialised. The
+    /// shader samples those levels by number, so the effect comes out as
+    /// garbage that tracks the blur: black borders on one report, a red
+    /// gradient on another, both from a 2019 Intel MacBook Pro with an AMD
+    /// Radeon Pro 5500M. The blit encoder's box filter is coarser than a
+    /// Gaussian but every level it writes is valid.
+    ///
+    /// Untested on Intel — no such machine here. The suspected cause is that
+    /// the picture is an `_srgb` format with `.shaderWrite` usage, which
+    /// non-Apple GPUs do not support writing to; confirming that needs the
+    /// hardware.
+    @discardableResult
+    nonisolated private static func buildPyramid(
+        _ pyramid: MPSUnaryImageKernel,
+        into texture: inout MTLTexture,
+        on commands: MTLCommandBuffer
+    ) -> Bool {
+        if pyramid.encode(commandBuffer: commands, inPlaceTexture: &texture, fallbackCopyAllocator: nil) {
+            return true
+        }
+        guard let blit = commands.makeBlitCommandEncoder() else {
+            if !hasReportedPyramidFailure {
+                hasReportedPyramidFailure = true
+                Diagnostics.geometry.error("pyramid: MPS refused and no blit encoder was available")
+            }
+            return false
+        }
+        blit.generateMipmaps(for: texture)
+        blit.endEncoding()
+        if !hasReportedPyramidFallback {
+            hasReportedPyramidFallback = true
+            Diagnostics.geometry.notice(
+                "pyramid: MPS encode refused on this GPU, using blit mipmaps instead"
+            )
+        }
+        return true
     }
 
     /// Puts the picture on a black margin, uploads it, and builds the pyramid.
@@ -184,8 +230,11 @@ final class DepthRenderer {
         )
         blit.endEncoding()
 
-        MPSImageGaussianPyramid(device: device, centerWeight: 0.375)
-            .encode(commandBuffer: commands, inPlaceTexture: &texture, fallbackCopyAllocator: nil)
+        Self.buildPyramid(
+            MPSImageGaussianPyramid(device: device, centerWeight: 0.375),
+            into: &texture,
+            on: commands
+        )
         commands.commit()
         commands.waitUntilCompleted()
         let finished = CFAbsoluteTimeGetCurrent()
@@ -340,15 +389,7 @@ final class DepthRenderer {
         pendingFrame = nil
         pendingSeed = nil
         blit.endEncoding()
-        let built = livePyramid.encode(
-            commandBuffer: commands,
-            inPlaceTexture: &target,
-            fallbackCopyAllocator: nil
-        )
-        if !built, !Self.hasReportedPyramidFailure {
-            Self.hasReportedPyramidFailure = true
-            Diagnostics.geometry.error("live pyramid in place encode returned false")
-        }
+        Self.buildPyramid(livePyramid, into: &target, on: commands)
         liveTexture = target
         texture = target
     }
