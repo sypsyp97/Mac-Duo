@@ -255,6 +255,12 @@ struct SettingsView: View {
     private func openScreenRecordingSettings() {
         settingsOpenFailed = false
         Task { @MainActor in
+            // macOS only raises its own alert the first time an app identity
+            // asks. When it does, the user never has to find the pane.
+            if await ScreenSnapshotter.requestPermission() {
+                hasScreenPermission = CGPreflightScreenCaptureAccess()
+                return
+            }
             do {
                 let configuration = NSWorkspace.OpenConfiguration()
                 configuration.activates = true

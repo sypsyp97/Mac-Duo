@@ -37,6 +37,24 @@ final class ScreenSnapshotter {
 
     var hasPermission: Bool { CGPreflightScreenCaptureAccess() }
 
+    /// Asks macOS for Screen Recording, off the main thread.
+    ///
+    /// `CGRequestScreenCaptureAccess` blocks until the alert is answered, and
+    /// it only raises one the first time this app identity is asked. That is
+    /// why the app has to ask at all rather than only pointing at System
+    /// Settings: an ad-hoc signed build changes identity on every rebuild, and
+    /// an entry left over from the previous one reads as granted in System
+    /// Settings while capture keeps failing. Asking re-records the current
+    /// binary; when macOS stays silent the panel's System Settings button is
+    /// still there.
+    static func requestPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: CGRequestScreenCaptureAccess())
+            }
+        }
+    }
+
     func beginPrewarm(interval: TimeInterval = 0.2) {
         guard timer == nil else { return }
         capture()

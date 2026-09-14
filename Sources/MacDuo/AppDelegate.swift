@@ -14,6 +14,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
         statusItemController = StatusItemController(controller: controller, preferences: preferences)
         controller.start()
+
+        guard !CGPreflightScreenCaptureAccess() else { return }
+        Task {
+            let granted = await ScreenSnapshotter.requestPermission()
+            Diagnostics.geometry.notice("screen recording requested at launch, granted: \(granted)")
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
