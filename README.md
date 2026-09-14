@@ -39,6 +39,25 @@ filesystem, so a lookup under a fixed casing found the directory in a developmen
 nothing in the shipped app, which then fell back to English. The fix takes the spelling from
 `Bundle.localizations`. That split is also why the fault appears only in downloaded builds.
 
+### Screen Recording permission while developing
+
+`build.sh` signs ad-hoc by default, and an ad-hoc signature has no stable identity: the
+designated requirement is the code hash, so **every rebuild invalidates the Screen Recording
+grant**. The entry left behind still reads as enabled in System Settings while capture keeps
+failing with `-3801`, which makes it look like a permission bug rather than a signing one.
+
+Sign with any code-signing identity and the requirement becomes the bundle id plus the
+certificate, which survives rebuilds:
+
+```sh
+SIGN_IDENTITY="My Local Signing" ./build.sh --universal
+codesign -d -r- "build/Mac Duo.app"
+# designated => identifier "to.maki.MacDuo" and certificate root = H"..."
+```
+
+A self-signed certificate is enough. Create one in Keychain Access (Certificate Assistant →
+Create a Certificate, type *Code Signing*), then grant the permission once.
+
 ### Measurements
 
 `swift build -c release --product depthbench && .build/release/depthbench` runs the live path's
