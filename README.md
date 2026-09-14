@@ -60,13 +60,19 @@ The app lands in `build/Mac Duo Pro.app`.
 
 ### Releasing
 
-Tag a version and the workflow builds, packages and publishes it:
+Tag a version, then run the workflow against that tag:
 
 ```sh
-git tag v1.0.0 && git push origin v1.0.0
+git tag -a v1.0.0 -m "Mac Duo Pro 1.0.0" && git push origin v1.0.0
+gh workflow run release.yml --ref v1.0.0
 ```
 
 It refuses to run if the tag and `CFBundleShortVersionString` disagree, so the two cannot drift.
+
+The dispatch is not redundant: on this repository a tag push produced no run at all, while a
+manual dispatch of the same workflow on the same ref ran and published. Actions is enabled and the
+workflow is active, so the `push` trigger is being filtered somewhere above the workflow — forks
+are treated differently. The trigger is left in place for anyone who has it working.
 
 ### Signing, and why it matters here
 
