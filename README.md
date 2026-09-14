@@ -57,7 +57,7 @@ certificate, which survives rebuilds:
 ```sh
 SIGN_IDENTITY="My Local Signing" ./build.sh --universal
 codesign -d -r- "build/Mac Duo.app"
-# designated => identifier "to.maki.MacDuo" and certificate root = H"..."
+# designated => identifier "com.sypsyp97.MacDuo" and certificate root = H"..."
 ```
 
 A self-signed certificate is enough: Keychain Access → Certificate Assistant → Create a

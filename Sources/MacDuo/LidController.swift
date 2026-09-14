@@ -164,7 +164,7 @@ final class LidController: ObservableObject {
         setPollInterval(Self.idlePollInterval)
         observeSystemEvents()
         DistributedNotificationCenter.default().addObserver(
-            forName: Notification.Name("to.maki.MacDuo.preview"),
+            forName: Notification.Name("com.sypsyp97.MacDuo.preview"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
