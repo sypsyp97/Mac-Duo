@@ -33,7 +33,11 @@ BIN_PATH="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
 BINARY="$BIN_PATH/MacDuo"
 PROBE="$BIN_PATH/lidprobe"
 
-rm -rf "$BUNDLE"
+# Every .app here, not just the one about to be written: renaming the app left
+# the old bundle behind, and Spotlight lists build output as an installed copy.
+rm -rf build/*.app
+mkdir -p build
+touch build/.metadata_never_index
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BINARY" "$BUNDLE/Contents/MacOS/MacDuo"
 # SwiftPM resolves Bundle.module relative to the application bundle.
